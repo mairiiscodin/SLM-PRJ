@@ -10,3 +10,5 @@ results/*
 !results/.gitkeep
 !results/verification.md
 data/benchmarks/
+# Spider (CC BY-SA 4.0) and ViText2SQL (no redistribution): download locally, never commit.
+data/external/

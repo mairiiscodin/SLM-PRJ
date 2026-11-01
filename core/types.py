@@ -21,6 +21,7 @@ class ExecutionResult:
     normalized_result: str | None = None
     unordered_result: str | None = None
     ordered_result: str | None = None
+    set_result: str | None = None
     row_count: int = 0
     truncated: bool = False
     elapsed_ms: float = 0.0

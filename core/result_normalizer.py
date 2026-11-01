@@ -28,6 +28,13 @@ def requires_order(sql: str) -> bool:
     return bool(tree.args.get("order") or tree.args.get("limit") or tree.args.get("offset"))
 
 
+def set_fingerprint(rows: list) -> str:
+    """BIRD/CSC-SQL EX semantics: set(predicted) == set(gold), ignoring order and duplicates."""
+    encoded = sorted({json.dumps([normalize_value(v) for v in row], ensure_ascii=False,
+                                 separators=(",", ":")) for row in rows})
+    return hashlib.sha256(json.dumps(encoded, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
 def fingerprint(rows: list, column_count: int, ordered: bool) -> str:
     encoded = [json.dumps([normalize_value(v) for v in row], ensure_ascii=False,
                           separators=(",", ":")) for row in rows]

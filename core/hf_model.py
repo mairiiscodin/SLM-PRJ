@@ -24,6 +24,7 @@ class HFModelBackend(ModelBackend):
         self.config = config
         model_config = config["model"]
         self.warnings = []
+        self.oom_caps = []
         requested = model_config["device"]
         self.device = "cuda" if requested == "auto" and torch.cuda.is_available() else requested
         if self.device == "auto":
@@ -103,8 +104,11 @@ class HFModelBackend(ModelBackend):
             def __call__(self, input_ids, scores, **kwargs):
                 return bool(deadline and time.perf_counter() >= deadline)
 
+        messages = [{"role": "user", "content": prompt}]
+        if parameters.get("system_prompt"):
+            messages.insert(0, {"role": "system", "content": parameters["system_prompt"]})
         text = self.tokenizer.apply_chat_template(
-            [{"role": "user", "content": prompt}], tokenize=False, add_generation_prompt=True
+            messages, tokenize=False, add_generation_prompt=True
         ) if self.tokenizer.chat_template else prompt
         inputs = self.tokenizer(text, return_tensors="pt", add_special_tokens=False)
         input_length = inputs["input_ids"].shape[-1]
@@ -115,6 +119,8 @@ class HFModelBackend(ModelBackend):
         candidates = []
         sampled = parameters.get("temperature", 0) > 0
         batch_size = parameters["batch_size"] if sampled else 1
+        # Reuse batch sizes that already ran out of memory on prompts at least this long.
+        batch_size = min([batch_size] + [b for length, b in self.oom_caps if input_length >= length])
         while len(candidates) < n:
             if deadline and time.perf_counter() >= deadline:
                 break
@@ -127,8 +133,13 @@ class HFModelBackend(ModelBackend):
             }
             if sampled:
                 kwargs.update(temperature=parameters["temperature"], top_p=parameters["top_p"])
+                if "top_k" in parameters:
+                    kwargs["top_k"] = parameters["top_k"]
             else:
                 kwargs.update(temperature=1.0, top_p=1.0, top_k=50)
+            # Overrides generation_config.json (repetition_penalty=1.1), e.g. to match vLLM's default 1.0.
+            if "repetition_penalty" in parameters:
+                kwargs["repetition_penalty"] = parameters["repetition_penalty"]
             start = time.perf_counter()
             try:
                 with self.lock, self.torch.inference_mode():
@@ -145,6 +156,7 @@ class HFModelBackend(ModelBackend):
                     # Batching is what makes self-consistency affordable; shrink it before giving up.
                     self.torch.cuda.empty_cache()
                     batch_size = max(1, size // 2)
+                    self.oom_caps.append((input_length, batch_size))
                     LOGGER.warning("CUDA hết bộ nhớ với batch %d; giảm còn %d.", size, batch_size)
                     continue
                 message = "CUDA hết bộ nhớ; giảm batch/max_new_tokens hoặc chọn CPU." if (

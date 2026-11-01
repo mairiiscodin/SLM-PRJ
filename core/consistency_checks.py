@@ -20,15 +20,21 @@ class ConsistencyChecker:
             tables = [row[0] for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
             self.names = {table.lower(): table for table in tables}
-            self.columns, self.keys, self.links = {}, set(), set()
+            self.columns, self.keys, self.links, primary = {}, set(), set(), {}
             for table in tables:
                 info = connection.execute(f"PRAGMA table_info({quote_identifier(table)})").fetchall()
                 self.columns[table.lower()] = {row[1].lower(): row[1] for row in info}
                 self.keys |= {(table.lower(), row[1].lower()) for row in info if row[5]}
+                primary[table.lower()] = next((row[1].lower() for row in info if row[5] == 1), "id")
+            for table in tables:
                 for row in connection.execute(f"PRAGMA foreign_key_list({quote_identifier(table)})"):
-                    source, target = (table.lower(), row[3].lower()), (row[2].lower(), (row[4] or "id").lower())
+                    target_table = row[2].lower()
+                    source = (table.lower(), row[3].lower())
+                    target = (target_table, (row[4] or primary.get(target_table, "id")).lower())
                     self.keys |= {source, target}
                     self.links.add(frozenset({source, target}))
+            # Only tables whose relationships the schema declares can be judged; many schemas omit FKs.
+            self.linked_tables = {table for link in self.links for table, _ in link}
         finally:
             connection.close()
 
@@ -81,6 +87,7 @@ class ConsistencyChecker:
                 left = (resolve(eq.this), eq.this.name.lower())
                 right = (resolve(eq.expression), eq.expression.name.lower())
                 if (left[0] and right[0] and left[0] != right[0]
+                        and {left[0], right[0]} <= self.linked_tables
                         and left in self.keys and right in self.keys
                         and frozenset({left, right}) not in self.links):
                     flags["bad_join"] = True

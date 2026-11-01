@@ -8,6 +8,7 @@ logistic re-ranker. Uncertainty: bootstrap over questions (paired for deltas) pl
 McNemar test on the canonical candidate order.
 """
 import argparse
+from collections import Counter
 import csv
 import json
 import math
@@ -19,12 +20,14 @@ import time
 import numpy as np
 
 from core.adaptive_sampler import decide
+from core.candidate_ranker import rank_candidates
 from core.config import ROOT, load_config
 from core.consistency_checks import CHECKS, ConsistencyChecker
 from core.result_grouper import group_candidates
 from core.sql_executor import SQLExecutor
 from databases.create_student_db import DEFAULT_DB, create_database
-from evaluation.run_sweep import _batch_cost, _candidates, _select
+from evaluation.judge import load as load_judgments, preference
+from evaluation.run_sweep import LEVELS, _batch_cost, _candidates, _read_pool, _select
 
 BUDGETS = [("fixed", 4), ("fixed", 8), ("fixed", 16),
            ("adaptive", ([4, 4, 8], 0.5, 2)), ("adaptive", ([4, 4, 8], 0.75, 2))]
@@ -36,22 +39,27 @@ def enrich(rows, db, config, flags_path):
     """Attach flags to every successful candidate (once per distinct SQL) and time the checks."""
     cache = {}
     executor = SQLExecutor(dict(config["execution"], max_rows=config["execution"]["max_result_rows"]))
-    checker = ConsistencyChecker(db)
+    checkers = {}
     timings = []
     for row in rows:
+        database = Path(row["db"]) if row.get("db") else db
+        if database not in checkers:
+            checkers[database] = ConsistencyChecker(database)
+        checker = checkers[database]
         for record in [row["greedy"], *row["pool"]]:
-            if not record["success"]:
+            if not record or not record["success"]:
                 continue
-            if record["sql"] not in cache:
-                result = executor.execute(db, record["sql"])
+            key = f"{database.name}|{record['sql']}"
+            if key not in cache:
+                result = executor.execute(database, record["sql"])
                 start = time.perf_counter()
                 flags = checker.check(record["sql"], result.rows)
                 timings.append((time.perf_counter() - start) * 1000)
                 tuples = [tuple(map(str, r)) for r in result.rows]
-                cache[record["sql"]] = flags | {
+                cache[key] = flags | {
                     "duplicates": len(tuples) != len(set(tuples)), "rows": result.row_count,
                     "columns": len(result.columns)}
-            record.update(cache[record["sql"]])
+            record.update(cache[key])
     flags_path.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
     return statistics.mean(timings) if timings else None
 
@@ -123,7 +131,7 @@ def train_rankers(rows, folds, seed):
     return {q: rankers[fold_of[q]] for q in range(len(rows))}, rankers
 
 
-def make_selectors(weights, rankers):
+def make_selectors(weights, rankers, judgments=None, ids=None, margin=0.0):
     def vote(records, _q):
         return _select(records, weights)
 
@@ -142,7 +150,32 @@ def make_selectors(weights, rankers):
         selectors[f"CAV only {check}"] = cav([check])
         selectors[f"CAV without {check}"] = cav([c for c in CHECKS if c != check])
     selectors["learned re-ranker (10-fold CV)"] = learned
+    if judgments is not None:
+        cav2 = [c for c in CHECKS if c != "degenerate"]
+        selectors["judge top-2"] = lambda records, q: _judged(records, q, ids, weights, judgments, margin)
+        selectors["CAV-2 + judge"] = lambda records, q: _judged(
+            _clean(records, cav2), q, ids, weights, judgments, margin)
+        selectors["CAV + judge"] = lambda records, q: _judged(
+            _clean(records, CHECKS), q, ids, weights, judgments, margin)
     return selectors
+
+
+def _judged(records, q, ids, weights, judgments, margin):
+    """Vote, then let the judge overturn it in favour of the largest rival cluster (>= 2 votes)."""
+    candidates = _candidates(records)
+    group_candidates(candidates)
+    chosen = rank_candidates(candidates, weights)
+    if not chosen:
+        return False
+    winner = records[chosen.id]
+    sizes = Counter(r["result"] for r in records if r["success"])
+    rivals = [h for h, n in sizes.items() if h != winner["result"] and n >= 2]
+    if rivals:
+        challenger = max(rivals, key=sizes.get)
+        p = preference(judgments, ids[q], winner["result"], challenger)
+        if p is not None and p > 0.5 + margin:
+            return next(r["correct"] for r in records if r["result"] == challenger)
+    return winner["correct"]
 
 
 def run_budget(row, order, budget, sample, select, q, stop_checks):
@@ -189,16 +222,30 @@ def mcnemar(base, new):
 
 def study(args):
     config = load_config(args.config)
-    rows = [json.loads(line) for line in (args.pool_dir / "pool.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    saved = args.pool_dir / "config.json"
+    if saved.exists():
+        # Re-execute candidates under the limits they were collected with (paper mode lifts the step cap).
+        config["execution"] = json.loads(saved.read_text(encoding="utf-8"))["execution"]
+    rows = _read_pool(args.pool_dir / "pool.jsonl", metric=args.metric)
     if args.db.resolve() == DEFAULT_DB.resolve():
         create_database()
+    if args.exclude_vacuous_gold:
+        # An empty or all-NULL/0 gold (e.g. COUNT over a value absent from the data) is matched by
+        # degenerate answers, so those questions cannot tell right SQL from wrong.
+        executor = SQLExecutor(dict(config["execution"], max_rows=config["execution"]["max_result_rows"]))
+
+        def informative(row):
+            gold = executor.execute(Path(row["db"]) if row.get("db") else args.db, row["gold_sql"])
+            return gold.row_count > 0 and any(v not in (None, 0) for r in gold.rows for v in r)
+        rows = [row for row in rows if informative(row)]
     args.output.mkdir(parents=True, exist_ok=True)
     check_ms = enrich(rows, args.db, config, args.output / "candidate_flags.json")
     rankers, fold_rankers = train_rankers(rows, args.folds, config["seed"])
     rng = random.Random(config["seed"])
     orders = [list(range(len(row["pool"]))) for row in rows]
     permutations = [orders] + [[rng.sample(o, len(o)) for o in orders] for _ in range(args.permutations)]
-    selectors = make_selectors(config["ranking"], rankers)
+    judgments = load_judgments(args.judge) if args.judge else None
+    selectors = make_selectors(config["ranking"], rankers, judgments, [row["id"] for row in rows], args.judge_margin)
     sample = dict(config["sampling"], max_candidates=len(rows[0]["pool"]))
     boot_rng = random.Random(config["seed"] + 1)
     summary, per_question = [], []
@@ -225,9 +272,9 @@ def study(args):
                     "early_stop_rate": statistics.fmean(o[3] for run in outcomes for o in run),
                     "oracle_at_budget": oracle,
                 }
-                for level in ("easy", "medium", "hard"):
+                for level in LEVELS:
                     subset = [v for v, row in zip(per_q, rows) if row["difficulty"] == level]
-                    record[f"acc_{level}"] = statistics.fmean(subset)
+                    record[f"acc_{level}"] = statistics.fmean(subset) if subset else None
                 record["acc_half_odd"] = statistics.fmean(per_q[1::2])
                 record["acc_half_even"] = statistics.fmean(per_q[0::2])
                 if base_q is None:
@@ -293,6 +340,13 @@ def main():
     parser.add_argument("--permutations", type=int, default=200)
     parser.add_argument("--resamples", type=int, default=2000)
     parser.add_argument("--folds", type=int, default=10)
+    parser.add_argument("--metric", choices=["strict", "set", "spider"], default="strict",
+                        help="strict multiset EX, CSC-SQL set EX, or Spider test-suite style EX")
+    parser.add_argument("--exclude-vacuous-gold", action="store_true",
+                        help="Drop questions whose gold result is empty or only NULL/0 (robustness check)")
+    parser.add_argument("--judge", type=Path, help="judgments.jsonl from evaluation.judge; adds judge selectors")
+    parser.add_argument("--judge-margin", type=float, default=0.1,
+                        help="Overturn the vote only when the judge prefers the rival with p > 0.5 + margin")
     parser.add_argument("--output", type=Path, default=ROOT / "results" / "selection")
     study(parser.parse_args())
 

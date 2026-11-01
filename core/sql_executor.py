@@ -2,7 +2,7 @@
 import sqlite3
 import time
 
-from core.result_normalizer import display_value, fingerprint, requires_order
+from core.result_normalizer import display_value, fingerprint, requires_order, set_fingerprint
 from core.schema_inspector import open_readonly
 from core.sql_validator import SQLValidator, authorizer, sanitize_error
 from core.types import ExecutionResult
@@ -61,6 +61,7 @@ class SQLExecutor:
             result.normalized_result = fingerprint(rows, len(result.columns), requires_order(sql))
             result.unordered_result = fingerprint(rows, len(result.columns), False)
             result.ordered_result = fingerprint(rows, len(result.columns), True)
+            result.set_result = set_fingerprint(rows)
             result.success = True
         except (sqlite3.Error, OSError) as error:
             result.error = sanitize_error(error)

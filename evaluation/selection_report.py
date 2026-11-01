@@ -8,14 +8,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from evaluation.run_sweep import LEVELS
+
 MAIN = {
     "vote (baseline)": "Vote (baseline)",
     "CAV (3 checks)": "CAV-3",
     "CAV without degenerate": "CAV-2 (grounding + join)",
     "learned re-ranker (10-fold CV)": "Learned re-ranker (CV)",
+    "judge top-2": "Judge top-2",
+    "CAV-2 + judge": "CAV-2 + judge",
+    "CAV + judge": "CAV-3 + judge",
 }
 COLORS = {"Vote (baseline)": "#8c8b86", "CAV-3": "#2a78d6",
-          "CAV-2 (grounding + join)": "#eb6834", "Learned re-ranker (CV)": "#1baf7a"}
+          "CAV-2 (grounding + join)": "#eb6834", "Learned re-ranker (CV)": "#1baf7a",
+          "Judge top-2": "#7a5af5", "CAV-2 + judge": "#c2398a",
+          "CAV-3 + judge": "#d6a21a"}
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 CHECK_NAMES = {"degenerate": "Kết quả rỗng / toàn NULL", "ungrounded": "Literal không có trong DB",
                "bad_join": "JOIN không theo khóa ngoại", "duplicates": "Dòng trùng lặp (chỉ dùng cho re-ranker)"}
@@ -23,6 +30,11 @@ CHECK_NAMES = {"degenerate": "Kết quả rỗng / toàn NULL", "ungrounded": "L
 
 def _pct(v) -> str:
     return f"{v * 100:.1f}"
+
+
+def _levels(frame) -> list[str]:
+    return [level for level in LEVELS
+            if f"acc_{level}" in frame and frame[f"acc_{level}"].notna().any()]
 
 
 def _p(v) -> str:
@@ -42,8 +54,10 @@ def _style(ax):
 def tables(frame: pd.DataFrame, meta: dict) -> str:
     main = frame[frame.method.isin(MAIN)].copy()
     main["name"] = main.method.map(MAIN)
+    levels = _levels(frame)
     head = ("| Ngân sách | Phương pháp | EX % [CI95] | Δ EX (điểm) [CI95] | McNemar −/+ (p) | Ứng viên TB "
-            "| Độ trễ (s) | Thu hẹp khoảng cách oracle | Easy | Medium | Hard |\n|---|---|---|---|---|---|---|---|---|---|---|")
+            "| Độ trễ (s) | Thu hẹp khoảng cách oracle | " + " | ".join(level.title() for level in levels)
+            + " |\n|" + "---|" * (8 + len(levels)))
     lines = ["## Bảng 1. So sánh phương pháp chọn SQL (cùng pool ứng viên)", "", head]
     for r in main.itertuples():
         delta = "—" if r.name == "Vote (baseline)" else (
@@ -53,7 +67,7 @@ def tables(frame: pd.DataFrame, meta: dict) -> str:
         name = f"**{r.name}**" if r.name != "Vote (baseline)" else r.name
         lines.append(f"| {r.budget} | {name} | {_pct(r.execution_accuracy)} [{_pct(r.ci95_low)}–{_pct(r.ci95_high)}] "
                      f"| {delta} | {test} | {r.average_candidates:.2f} | {r.est_latency_s:.1f} | {gap} "
-                     f"| {_pct(r.acc_easy)} | {_pct(r.acc_medium)} | {_pct(r.acc_hard)} |")
+                     "| " + " | ".join(_pct(getattr(r, f"acc_{level}")) for level in levels) + " |")
     lines += ["", "Δ và CI95: paired bootstrap trên câu hỏi; McNemar exact trên thứ tự ứng viên gốc "
               "(−: câu baseline đúng nhưng phương pháp sai, +: ngược lại). "
               "Thu hẹp khoảng cách oracle = Δ / (oracle@ngân sách − baseline).", ""]
@@ -103,12 +117,12 @@ def fig_bars(frame, out):
     main = frame[frame.method.isin(MAIN)].copy()
     main["name"] = main.method.map(MAIN)
     budgets = list(dict.fromkeys(main.budget))
-    names = list(MAIN.values())
+    names = [name for name in MAIN.values() if name in set(main.name)]
     fig, ax = plt.subplots(figsize=(10, 4.8), layout="constrained")
-    width = 0.19
+    width = 0.76 / len(names)
     for i, name in enumerate(names):
         sub = main[main.name == name].set_index("budget").loc[budgets]
-        xs = [b + (i - 1.5) * (width + 0.015) for b in range(len(budgets))]
+        xs = [b + (i - (len(names) - 1) / 2) * (width + 0.015) for b in range(len(budgets))]
         ax.bar(xs, sub.execution_accuracy * 100, width, color=COLORS[name], label=name,
                edgecolor="white", linewidth=1)
         ax.errorbar(xs, sub.execution_accuracy * 100,
@@ -136,7 +150,7 @@ def fig_pareto(frame, sweep_csv, out):
     main = frame[frame.method.isin(MAIN)].copy()
     main["name"] = main.method.map(MAIN)
     fig, ax = plt.subplots(figsize=(8, 5), layout="constrained")
-    for name in MAIN.values():
+    for name in [name for name in MAIN.values() if name in set(main.name)]:
         sub = main[main.name == name]
         fixed = sub[sub.budget.str.startswith("fixed")].sort_values("average_candidates")
         adaptive = sub[sub.budget.str.startswith("adaptive")]

@@ -214,6 +214,20 @@ python -m evaluation.run_ablation --backend huggingface --dataset data/benchmark
 
 Thay đường dẫn theo gói thực tế. Importer nhận `SQL` hoặc `sql`, giữ evidence, kiểm tra đường dẫn DB và ghi `db_path` tương đối với JSON đầu ra. Không tự tải hay thay đổi database. Pipeline cũng nhận dataset JSON tự viết theo định dạng này. BIRD chưa được tải/chạy trong phiên triển khai.
 
+So sánh với bảng BIRD dev của bài báo (thiết lập paper, tập con phân tầng theo độ khó). Giải nén gói BIRD dev vào `data/external/bird/dev` (có `dev.json`, `dev_tables.json`, `dev_databases/`):
+
+```powershell
+python scripts/import_bird.py --questions data/external/bird/dev/dev.json --database-root data/external/bird/dev/dev_databases --tables data/external/bird/dev/dev_tables.json --sample 200 --output data/benchmarks/bird_dev200.json
+scripts\run_bird_dev_adaptive.bat
+python -m evaluation.judge results/bird-dev200-adaptive --dataset data/benchmarks/bird_dev200.json
+python -m evaluation.selection_study results/bird-dev200-adaptive --metric set --judge results/bird-dev200-adaptive/judgments-merge.jsonl --output results/selection-bird-dev200-adaptive
+python -m evaluation.selection_report results/selection-bird-dev200-adaptive
+```
+
+`--sample` chia số câu theo tỉ lệ simple/moderate/challenging của bản đầy đủ, giữ thứ tự gốc; cùng `--seed` luôn chọn cùng câu. BIRD dùng metric `set` (EX chính thức của BIRD so tập kết quả). `run_bird_dev_adaptive.bat` sinh mẫu adaptive 4-4-8 (dừng ở 4/8 mẫu khi vote đồng thuận, τ = 0,75), ghi `progress.txt` sau mỗi câu và chạy tiếp được sau khi tắt máy; `run_bird_dev.bat` luôn sinh đủ 16 mẫu (khoảng 40 giờ trên RTX 2050 4 GB).
+
+Kết quả: mục 9, [So sánh với bài báo: BIRD dev](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-200-câu).
+
 Tách tập chỉnh ngưỡng và tập đánh giá cuối; báo cáo rõ subset, ngôn ngữ, seed, model, prompt, giới hạn thời gian/kết quả và số câu bị lỗi. Nếu dịch câu hỏi tiếng Anh sang tiếng Việt, kiểm tra bản dịch và báo cáo thành một tập riêng.
 
 ## 9. Evaluation và ablation
@@ -286,7 +300,7 @@ Pool: 90,3% ứng viên chạy được, 45,8% đúng, trung bình 4,14 kết qu
 
 Greedy và K=16 không có CI vì kết quả không phụ thuộc thứ tự pool. Lịch `4-4-8-16` cho kết quả trùng `4-4-8` vì pool chỉ có 16 ứng viên; τ=0.9 và τ=1.0 cũng trùng nhau.
 
-![Độ chính xác theo số ứng viên](docs/results/sweep_candidates.png)
+![Độ chính xác theo số ứng viên](docs/results/  sweep_candidates.png)
 
 ![Độ chính xác theo độ trễ ước tính](docs/results/sweep_latency.png)
 
@@ -298,6 +312,80 @@ Nhận xét:
 - Lịch nhỏ `2-2-4-8` tiết kiệm ứng viên nhất (5,5) nhưng chậm hơn `4-4-8` khi batch 4, vì vòng 2 ứng viên vẫn tốn trọn một batch.
 - Khoảng cách tới oracle (88% so với 55%) là điểm nghẽn chính: 44/100 câu có ứng viên đúng nhưng là thiểu số trong pool, nên bỏ phiếu đa số chọn sai; 12/100 câu không có ứng viên đúng nào. Câu hard là yếu nhất (≤20%).
 - Giới hạn: 100 câu tự soạn trên một database, một seed, correction tắt, độ trễ là ước tính. Câu hỏi có thể đã được xem khi chỉnh prompt, nên đây không phải tập đánh giá mù; cần thêm Spider/BIRD và nhiều seed trước khi đưa vào bài báo.
+
+### So sánh với bài báo: Spider dev (SLM-SQL-1.5B, 55 câu)
+
+Chạy ngày 25/10/2026 trên RTX 2050 4 GB, model `cycloneboy/SLM-SQL-1.5B` (BF16), seed 42. Dữ liệu: 55/1034 câu Spider dev (mỗi câu thứ 20 từ `spider_dev_0` đến `spider_dev_1020`, cộng `spider_dev_1`–`3`; 15 easy, 20 medium, 9 hard, 11 extra). Thiết lập theo bài báo: prompt Appendix E.1, 16 mẫu/câu, temperature 0.8, top-p 1.0, `max_new_tokens` 1024, không greedy, correction tắt. CI95 từ 2000 lần bootstrap theo câu hỏi.
+
+```powershell
+scripts\run_spider_dev.bat
+python -m evaluation.selection_study results/spider-dev-paper --metric spider --output results/selection-spider-dev55-spider
+python -m evaluation.selection_report results/selection-spider-dev55-spider
+```
+
+| Cấu hình | EX % [CI95] (spider) | EX % (set) | Ứng viên TB | Độ trễ (s/câu) |
+|---|---|---|---|---|
+| 1 mẫu (trung bình pool) | 65.2 | 65.9 | 1.00 | ~14 |
+| Vote K=4 | 68.5 [56.9–79.1] | 68.8 | 4.00 | 57.4 |
+| Vote K=8 | 70.1 [57.9–80.7] | 70.0 | 8.00 | 114.9 |
+| **Vote K=16** | **70.9 [58.2–81.8]** | 70.9 | 16.00 | 229.8 |
+| Adaptive 4-4-8, τ=0.75, min_valid=2 | 70.3 [58.3–81.7] | 70.4 | 5.82 | 85.2 |
+| CAV-2 (grounding + join), K=16 | 70.9 [60.0–81.8] | – | 16.00 | 229.8 |
+| Oracle pass@16 (giới hạn trên) | 83.6 | 78.2 | 16.00 | – |
+
+Số của bài báo (Sheng & Xu, 2025, Bảng 3, Spider dev, 16 mẫu sinh SQL; CSC thêm 8 mẫu merge-revision bằng model 0.5B):
+
+| Model | Bài báo SC | Bài báo CSC | Project (vote K=16) |
+|---|---|---|---|
+| SLM-SQL-1.5B (SFT + RL) | 75.15 | 76.72 | 70.9 [58.2–81.8] |
+| SLM-SQL-0.5B (SFT + RL) | 70.60 | 72.08 | chưa chạy |
+
+Bảng đầy đủ (ablation CAV, độ tin cậy từng kiểm tra, theo độ khó): [docs/results/selection_spider_dev55.md](docs/results/selection_spider_dev55.md).
+
+Nhận xét:
+
+- Vote K=16 tương ứng cột SC của bài báo. Kết quả thấp hơn 4,3 điểm nhưng CI95 rộng (±12 điểm) và chứa 75,15, nên với 55 câu chưa kết luận là lệch so với bài báo. Cần chạy đủ 1034 câu (CI95 khoảng ±3 điểm).
+- Chưa so được với CSC vì project chưa có model merge-revision.
+- 96,6% ứng viên chạy được. Khoảng cách tới oracle (83,6% so với 70,9%) nhỏ hơn nhiều so với tập sinh viên, nhưng vote vẫn bỏ lỡ 7/55 câu có ứng viên đúng.
+- Easy thấp bất thường (66,7%) so với medium (85,0%) và hard (77,8%) khi dùng K=16; với 15 câu easy, 1 câu sai làm thay đổi 6,7 điểm.
+- CAV-2 bằng vote (Δ trong ±0,4 điểm); CAV-3 giảm 1–4 điểm do kiểm tra kết quả rỗng gắn cờ cả ứng viên đúng.
+- Nguyên nhân có thể gây lệch: metric `spider` là evaluator local mô phỏng test-suite, không phải evaluator chính thức; mẫu 55 câu lệch độ khó; sinh bằng Transformers thay vì vLLM nên sampling có thể khác.
+
+### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 200 câu)
+
+Chạy ngày 31/10–01/11/2026 trên RTX 2050 4 GB, model `cycloneboy/SLM-SQL-1.5B` (BF16), seed 42. Dữ liệu: 200/1534 câu BIRD dev, lấy phân tầng theo độ khó (121 simple, 60 moderate, 19 challenging), có evidence. Prompt và sampling theo bài báo (Appendix E.1, temperature 0.8, top-p 1.0, `max_new_tokens` 1024), nhưng sinh **adaptive 4-4-8** (τ = 0,75): câu nào 4 hoặc 8 mẫu đầu đã đồng thuận thì dừng. Metric `set` (EX chính thức của BIRD). CI95 từ 2000 lần bootstrap theo câu hỏi; p là McNemar so với vote trên cùng pool.
+
+```powershell
+scripts\run_bird_dev_adaptive.bat
+python -m evaluation.judge results/bird-dev200-adaptive --dataset data/benchmarks/bird_dev200.json
+python -m evaluation.selection_study results/bird-dev200-adaptive --metric set --judge results/bird-dev200-adaptive/judgments-merge.jsonl --output results/selection-bird-dev200-adaptive
+python -m evaluation.selection_report results/selection-bird-dev200-adaptive
+```
+
+Chi phí sinh: trung bình **9,2 mẫu/câu** (93 câu dừng ở 4 mẫu, 30 ở 8, 77 ở 16), 229 s/câu, tổng khoảng 13 giờ (luôn 16 mẫu ước tính khoảng 40 giờ). Judge merge-revision chạy thêm trên 54 câu có hai cụm kết quả ≥ 2 phiếu (4 lần sinh lại mỗi cặp, margin 0,1).
+
+| Chọn đáp án (cùng pool) | EX % [CI95] | Δ vs vote | Mất / cứu | p | Simple | Moderate | Challenging |
+|---|---|---|---|---|---|---|---|
+| Vote (self-consistency) | 59,5 [53,0–66,0] | | | | 66,1 | 51,7 | 42,1 |
+| Judge top-2 | 60,3 [53,3–67,1] | +0,8 | 3 / 4 | 1,0 | 68,6 | 47,7 | 47,4 |
+| CAV-2 (grounding + join) | 61,5 [55,0–68,0] | +2,0 | 1 / 5 | 0,22 | 66,9 | 58,3 | 36,8 |
+| CAV-2 + judge | 63,0 [56,5–69,5] | +3,5 | 1 / 8 | 0,039 | 68,6 | 56,7 | 47,4 |
+| CAV-3 | 65,0 [58,0–71,5] | +5,5 | 0 / 11 | 0,001 | 70,2 | 61,7 | 42,1 |
+| Learned re-ranker (10-fold CV) | 65,0 [58,5–71,5] | +5,5 | 1 / 12 | 0,003 | 71,1 | 60,0 | 42,1 |
+| **CAV-3 + judge** | **65,5 [59,0–72,0]** | **+6,0** | 1 / 13 | **0,002** | 71,1 | 60,0 | 47,4 |
+| Oracle (có ít nhất 1 mẫu đúng) | 72,0 | | | | | | |
+| **Bài báo, SLM-SQL-1.5B** (1534 câu, 16 mẫu) | **67,08** | | | | | | |
+
+Với ngân sách nhỏ hơn, CAV-3 + judge vẫn hơn vote: 61,3 so với 57,1 (K = 4) và 64,5 so với 58,7 (K = 8). Bảng đầy đủ và hình: [results/selection-bird-dev200-adaptive/](results/selection-bird-dev200-adaptive/tables.md).
+
+Nhận xét:
+
+- **Chưa vượt 67,08 của bài báo.** CAV-3 + judge đạt 65,5, thấp hơn 1,6 điểm; 67,08 nằm trong CI95, nên với 200 câu chưa kết luận được là thấp hơn hay cao hơn.
+- **Cải thiện so với vote có ý nghĩa thống kê**: +6,0 điểm, cứu 13 câu, làm sai 1 câu (p = 0,002), dùng 9,2 mẫu/câu so với 16 của bài báo.
+- CAV đóng góp phần lớn. Trên BIRD, kiểm tra `degenerate` (kết quả rỗng/NULL) không gắn cờ nhầm ứng viên đúng nào, khác Spider, nên CAV-3 tốt hơn CAV-2.
+- Judge đứng riêng gần như không giúp (+0,8); chỉ có ích sau khi CAV đã loại ứng viên lỗi, chủ yếu ở câu challenging (42,1 → 47,4).
+- Adaptive có giá: một số câu 4 mẫu đầu đồng thuận vào đáp án sai, oracle của pool chỉ 72,0.
+- Không so sánh ngang hàng: bài báo dùng toàn bộ 1534 câu, luôn 16 mẫu và vLLM; ở đây là 200 câu, pool adaptive và Transformers. Chưa xác minh 67,08 là SC hay CSC.
 
 ## 10. Config
 
