@@ -226,7 +226,44 @@ python -m evaluation.selection_report results/selection-bird-dev200-adaptive
 
 `--sample` chia số câu theo tỉ lệ simple/moderate/challenging của bản đầy đủ, giữ thứ tự gốc; cùng `--seed` luôn chọn cùng câu. BIRD dùng metric `set` (EX chính thức của BIRD so tập kết quả). `run_bird_dev_adaptive.bat` sinh mẫu adaptive 4-4-8 (dừng ở 4/8 mẫu khi vote đồng thuận, τ = 0,75), ghi `progress.txt` sau mỗi câu và chạy tiếp được sau khi tắt máy; `run_bird_dev.bat` luôn sinh đủ 16 mẫu (khoảng 40 giờ trên RTX 2050 4 GB).
 
-Kết quả: mục 9, [So sánh với bài báo: BIRD dev](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-200-câu).
+Kết quả: mục 9, [So sánh với bài báo: BIRD dev, 1534 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-1534-câu) và [200 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-200-câu).
+
+#### Sinh pool trên Kaggle bằng vLLM (đủ 16 mẫu, cả 1534 câu)
+
+GPU 4 GB cần khoảng 4–17 phút/câu với 16 mẫu. Trên Kaggle (T4 16 GB, miễn phí khoảng 30 giờ GPU/tuần), `evaluation/vllm_collect.py` sinh pool bằng vLLM như code của SLM-SQL/CSC-SQL: cùng prompt, sampling, trích SQL, kiểm tra, thực thi và nhãn gold như `run_sweep collect --prompt paper --skip-greedy`, ghi `pool.jsonl` cùng định dạng, đường dẫn DB tương đối với thư mục project.
+
+```powershell
+python scripts/import_bird.py --questions data/external/bird/dev_20240627/dev.json --database-root data/external/bird/dev_20240627/dev_databases --tables data/external/bird/dev_20240627/dev_tables.json --output data/benchmarks/bird_dev.json
+python scripts/pack_kaggle.py --dataset data/benchmarks/bird_dev.json data/benchmarks/bird_dev200.json
+```
+
+1. Upload `dist/adaptive-slm-sql-kaggle.zip` thành Kaggle Dataset **Private** (dữ liệu BIRD không phân phối lại công khai).
+2. Import [notebooks/kaggle_vllm_bird.ipynb](notebooks/kaggle_vllm_bird.ipynb) vào Kaggle, *Add Input* dataset trên, bật GPU T4 và Internet.
+3. Chạy thử `LIMIT = 20`, sau đó `LIMIT = None` và *Save Version → Save & Run All*.
+4. Tải `bird-dev-vllm.zip` ở tab *Output*, giải nén vào thư mục project (kiểm tra đường dẫn là `results/bird-dev-vllm/pool.jsonl`, không lồng `results/results/`), rồi chạy local:
+
+```powershell
+python -m evaluation.selection_study results/bird-dev-vllm --metric set --output results/selection-bird-dev-vllm
+python -m evaluation.selection_report results/selection-bird-dev-vllm
+```
+
+Judge (`evaluation.judge results/bird-dev-vllm --dataset data/benchmarks/bird_dev.json`, rồi thêm `--judge results/bird-dev-vllm/judgments-merge.jsonl` vào `selection_study`) chưa chạy trên cả tập: ước tính khoảng 400 câu cần judge, khoảng 14 giờ trên RTX 2050.
+
+Đã chạy ngày 02/11/2026 (`vllm==0.8.5.post1`, `VLLM_USE_V1=0`, `--dtype half`, 1 GPU T4): khoảng 9 s/câu, tổng khoảng 4 giờ cho 1534 câu × 16 mẫu, kể cả thời gian chạy SQL. Notebook xử lý ba vấn đề gặp khi chạy:
+
+- Image Kaggle dùng Python 3.13, vLLM 0.8.5 chỉ hỗ trợ < 3.13: vLLM được cài vào venv Python 3.12 (`uv`, `--exclude-newer 2025-05-15` để khóa các thư viện phụ).
+- `card_games.sqlite` của BIRD ở chế độ WAL nên không mở được trên `/kaggle/input` (chỉ đọc; `unable to open database file`): code và database được chép sang `/tmp`.
+- Mỗi version là máy mới: *Add Input* output của version trước thì cell sinh pool chép `pool.jsonl` cũ sang để chạy tiếp (chưa kiểm chứng trên Kaggle).
+
+**64 mẫu/câu như bài báo**: sinh thêm 48 mẫu cho cùng 1534 câu rồi ghép với pool 16 mẫu. Cấu hình mặc định của notebook (`RUN = "bird-dev-vllm-extra48"`, `POOL = 48`, `SEED_OFFSET = 100000`, `GPUS = 2`) chạy hai tiến trình vLLM, mỗi T4 một nửa số câu (`--shard 0/2`, `1/2`); seed của câu thứ i là 42 + 100000 + i nên mẫu khác hẳn lần đầu (42 + i). Upload lại `dist/adaptive-slm-sql-kaggle.zip` (*New Version* của dataset) vì code đã đổi. Sau khi tải `bird-dev-vllm-extra48.zip` về:
+
+```powershell
+python scripts/merge_pools.py results/bird-dev-vllm results/bird-dev-vllm-extra48/shard0 results/bird-dev-vllm-extra48/shard1 --output results/bird-dev-vllm-64
+python -m evaluation.selection_study results/bird-dev-vllm-64 --metric set --output results/selection-bird-dev-vllm-64
+python -m evaluation.selection_report results/selection-bird-dev-vllm-64
+```
+
+`merge_pools` giữ thứ tự (16 mẫu cũ trước) và báo lỗi nếu thiếu hoặc trùng câu; `selection_study` thêm ngân sách K = 32 và 64 khi pool đủ lớn. Cấu hình đánh giá cố định từ trước (CAV-3, không chỉnh ngưỡng trên dev); báo cáo kèm số trên 1334 câu ngoài `bird_dev200`.
 
 Tách tập chỉnh ngưỡng và tập đánh giá cuối; báo cáo rõ subset, ngôn ngữ, seed, model, prompt, giới hạn thời gian/kết quả và số câu bị lỗi. Nếu dịch câu hỏi tiếng Anh sang tiếng Việt, kiểm tra bản dịch và báo cáo thành một tập riêng.
 
@@ -351,6 +388,50 @@ Nhận xét:
 - CAV-2 bằng vote (Δ trong ±0,4 điểm); CAV-3 giảm 1–4 điểm do kiểm tra kết quả rỗng gắn cờ cả ứng viên đúng.
 - Nguyên nhân có thể gây lệch: metric `spider` là evaluator local mô phỏng test-suite, không phải evaluator chính thức; mẫu 55 câu lệch độ khó; sinh bằng Transformers thay vì vLLM nên sampling có thể khác.
 
+### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 1534 câu)
+
+Sinh ngày 02/11/2026 trên Kaggle (T4, vLLM 0.8.5, FP16), model `cycloneboy/SLM-SQL-1.5B`, seed 42. Dữ liệu: cả 1534 câu BIRD dev, có evidence. Thiết lập theo bài báo: prompt Appendix E.1, luôn 16 mẫu/câu, temperature 0.8, top-p 1.0, `max_new_tokens` 1024, không greedy, correction tắt. Metric `set` (EX chính thức của BIRD). K = 4/8 lấy 4/8 mẫu đầu của pool, lấy trung bình trên 201 hoán vị thứ tự mẫu; CI95 từ 2000 lần bootstrap theo câu hỏi (paired cho Δ); McNemar exact so với vote trên thứ tự mẫu gốc.
+
+```powershell
+python -m evaluation.selection_study results/bird-dev-vllm --metric set --output results/selection-bird-dev-vllm
+python -m evaluation.selection_report results/selection-bird-dev-vllm
+```
+
+| Chọn đáp án (cùng pool) | Mẫu/câu | EX % [CI95] | Δ vs vote [CI95] | Mất / cứu | p | Simple | Moderate | Challenging |
+|---|---|---|---|---|---|---|---|---|
+| Vote | 4 | 58,3 [56,1–60,4] | | | | 66,0 | 48,7 | 39,9 |
+| CAV-3 | 4 | 61,7 [59,5–63,9] | +3,4 [+2,9, +4,0] | 2 / 54 | <0,001 | 68,8 | 53,1 | 43,8 |
+| Vote | 8 | 60,2 [58,0–62,5] | | | | 67,5 | 51,4 | 42,5 |
+| CAV-3 | 8 | 64,4 [62,2–66,7] | +4,2 [+3,4, +5,0] | 3 / 73 | <0,001 | 71,0 | 56,7 | 46,9 |
+| Vote (self-consistency) | 16 | 61,7 [59,3–64,1] | | | | 68,8 | 53,0 | 44,1 |
+| CAV-2 (grounding + join) | 16 | 64,6 [62,2–67,0] | +2,9 [+1,9, +4,0] | 8 / 53 | <0,001 | 71,4 | 56,7 | 46,9 |
+| **CAV-3** | 16 | **66,1 [63,7–68,6]** | **+4,4 [+3,3, +5,5]** | 6 / 73 | <0,001 | 72,8 | 58,0 | 49,0 |
+| Learned re-ranker (10-fold CV) | 16 | 66,2 [63,8–68,4] | +4,5 [+3,4, +5,6] | 2 / 71 | <0,001 | 72,6 | 58,4 | 49,7 |
+| Adaptive 4-4-8 τ=0,75 + CAV-3 | 7,80 | 64,5 [62,2–66,9] | +3,1 [+2,4, +3,9] | 5 / 58 | <0,001 | 71,1 | 56,7 | 47,8 |
+| Oracle (có ít nhất 1 mẫu đúng) | 16 | 76,3 | | | | | | |
+
+Số của bài báo (Sheng & Xu, 2025, [arXiv 2507.22478](https://arxiv.org/abs/2507.22478) v1, ablation BIRD dev, SLM-SQL-1.5B; CSC = sinh lại bằng model merge-revision):
+
+| Cấu hình bài báo | Dev EX % | Project, cùng số mẫu sinh |
+|---|---|---|
+| 64 mẫu + CSC (SLM-SQL đầy đủ) | 67,08 | – |
+| 16 mẫu + CSC | 64,84 | CAV-3 K=16: 66,1 |
+| 64 mẫu, bỏ CSC (vote) | 61,95 | Vote K=16: 61,7 |
+| Theo độ khó, 64 mẫu + CSC (simple / moderate / challenging) | 73,30 / 59,91 / 51,03 | CAV-3 K=16: 72,8 / 58,0 / 49,0 |
+
+Bảng đầy đủ (ablation từng kiểm tra, độ tin cậy kiểm tra, adaptive τ = 0,5) và hình: [results/selection-bird-dev-vllm/](results/selection-bird-dev-vllm/tables.md).
+
+Nhận xét:
+
+- **Tái lập khớp bài báo**: vote 16 mẫu đạt 61,7, gần bằng vote 64 mẫu của bài báo (61,95). Pool sinh bằng vLLM trên Kaggle dùng được để so sánh.
+- **Cùng 16 mẫu, CAV-3 (66,1) cao hơn CSC của bài báo (64,84)** mà không gọi thêm model: CAV-3 chỉ chạy lại SQL và kiểm tra kết quả (khoảng 4 ms/ứng viên), không cần gold. CAV-3 với 8 mẫu (64,4) gần bằng 16 mẫu + CSC.
+- **Thấp hơn cấu hình đầy đủ 67,08 khoảng 1 điểm**, nhưng bài báo dùng gấp 4 lần số mẫu cộng merge revision; 67,08 nằm trong CI95 của CAV-3 K=16.
+- Không phải so sánh ghép cặp: pool, seed và phần cứng khác nhau, bài báo không công bố kết quả từng câu. Chỉ kết luận được "ngang hoặc hơn ở cùng 16 mẫu", không kết luận "vượt có ý nghĩa thống kê".
+- So với vote trên cùng pool, cải thiện chắc chắn ở mọi ngân sách (+3,1 đến +4,4 điểm, p < 0,001), thu hẹp khoảng 30% khoảng cách tới oracle. Re-ranker học được không hơn CAV-3 (chênh ≤ 0,1 điểm).
+- Ablation (K=16): riêng `degenerate` +3,5, riêng `ungrounded` +1,9, riêng `bad_join` +1,1. `bad_join` có precision thấp nhất (84% ứng viên bị gắn cờ là sai, so với 97–99% của hai kiểm tra kia).
+- Adaptive 4-4-8 (τ = 0,75) tiết kiệm 51% số mẫu nhưng mất 1,6 điểm so với CAV-3 K=16.
+- Trong 24.544 mẫu: 89% chạy được, 9% lỗi schema (sai tên bảng/cột), 1% lỗi cú pháp, 5 mẫu timeout. Oracle theo database thấp nhất ở `card_games` (59,2%), cao nhất ở `superhero` (90,7%).
+
 ### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 200 câu)
 
 Chạy ngày 31/10–01/11/2026 trên RTX 2050 4 GB, model `cycloneboy/SLM-SQL-1.5B` (BF16), seed 42. Dữ liệu: 200/1534 câu BIRD dev, lấy phân tầng theo độ khó (121 simple, 60 moderate, 19 challenging), có evidence. Prompt và sampling theo bài báo (Appendix E.1, temperature 0.8, top-p 1.0, `max_new_tokens` 1024), nhưng sinh **adaptive 4-4-8** (τ = 0,75): câu nào 4 hoặc 8 mẫu đầu đã đồng thuận thì dừng. Metric `set` (EX chính thức của BIRD). CI95 từ 2000 lần bootstrap theo câu hỏi; p là McNemar so với vote trên cùng pool.
@@ -369,12 +450,12 @@ Chi phí sinh: trung bình **9,2 mẫu/câu** (93 câu dừng ở 4 mẫu, 30 �
 | Vote (self-consistency) | 59,5 [53,0–66,0] | | | | 66,1 | 51,7 | 42,1 |
 | Judge top-2 | 60,3 [53,3–67,1] | +0,8 | 3 / 4 | 1,0 | 68,6 | 47,7 | 47,4 |
 | CAV-2 (grounding + join) | 61,5 [55,0–68,0] | +2,0 | 1 / 5 | 0,22 | 66,9 | 58,3 | 36,8 |
-| CAV-2 + judge | 63,0 [56,5–69,5] | +3,5 | 1 / 8 | 0,039 | 68,6 | 56,7 | 47,4 |
+| CAV-2 + judge | 62,9 [56,2–69,5] | +3,4 | 1 / 8 | 0,039 | 68,6 | 56,2 | 47,4 |
 | CAV-3 | 65,0 [58,0–71,5] | +5,5 | 0 / 11 | 0,001 | 70,2 | 61,7 | 42,1 |
 | Learned re-ranker (10-fold CV) | 65,0 [58,5–71,5] | +5,5 | 1 / 12 | 0,003 | 71,1 | 60,0 | 42,1 |
 | **CAV-3 + judge** | **65,5 [59,0–72,0]** | **+6,0** | 1 / 13 | **0,002** | 71,1 | 60,0 | 47,4 |
 | Oracle (có ít nhất 1 mẫu đúng) | 72,0 | | | | | | |
-| **Bài báo, SLM-SQL-1.5B** (1534 câu, 16 mẫu) | **67,08** | | | | | | |
+| **Bài báo, SLM-SQL-1.5B** (1534 câu, 64 mẫu + CSC) | **67,08** | | | | | | |
 
 Với ngân sách nhỏ hơn, CAV-3 + judge vẫn hơn vote: 61,3 so với 57,1 (K = 4) và 64,5 so với 58,7 (K = 8). Bảng đầy đủ và hình: [results/selection-bird-dev200-adaptive/](results/selection-bird-dev200-adaptive/tables.md).
 
@@ -385,7 +466,8 @@ Nhận xét:
 - CAV đóng góp phần lớn. Trên BIRD, kiểm tra `degenerate` (kết quả rỗng/NULL) không gắn cờ nhầm ứng viên đúng nào, khác Spider, nên CAV-3 tốt hơn CAV-2.
 - Judge đứng riêng gần như không giúp (+0,8); chỉ có ích sau khi CAV đã loại ứng viên lỗi, chủ yếu ở câu challenging (42,1 → 47,4).
 - Adaptive có giá: một số câu 4 mẫu đầu đồng thuận vào đáp án sai, oracle của pool chỉ 72,0.
-- Không so sánh ngang hàng: bài báo dùng toàn bộ 1534 câu, luôn 16 mẫu và vLLM; ở đây là 200 câu, pool adaptive và Transformers. Chưa xác minh 67,08 là SC hay CSC.
+- Thử judge cả cặp còn lại sau khi CAV lọc (`evaluation.judge --cav --min-size 1`, thêm 46 câu, cho phép cụm 1 phiếu thắng): **không cải thiện**, CAV-3 + judge giảm còn 65,0 (mất 3 / cứu 14, so với 1 / 13). Judge 1.5B hay lật nhầm sang ứng viên lẻ; margin 0,25 hoặc 0,4 cho 64,5. Kết quả giữ ở `results/selection-bird-dev200-adaptive-cavjudge/`; bảng trên chỉ dùng `judgments-merge.jsonl`.
+- Không so sánh ngang hàng: bài báo dùng toàn bộ 1534 câu, 64 mẫu + CSC (67,08 là cấu hình đầy đủ; 16 mẫu + CSC đạt 64,84) và vLLM; ở đây là 200 câu, pool adaptive và Transformers. Kết quả trên cả 1534 câu: [mục trên](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-1534-câu).
 
 ## 10. Config
 

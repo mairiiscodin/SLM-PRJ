@@ -12,3 +12,6 @@ results/*
 data/benchmarks/
 # Spider (CC BY-SA 4.0) and ViText2SQL (no redistribution): download locally, never commit.
 data/external/
+
+# Kaggle upload bundle (scripts/pack_kaggle.py)
+dist/

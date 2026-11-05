@@ -47,3 +47,10 @@ def test_judge_prompts_use_only_tables_in_queries(db):
     assert "CREATE TABLE students" in schema and "CREATE TABLE departments" not in schema
     prompt = base_prompt({"db": str(db), "question": "Q?"}, {}, "")
     assert "CREATE TABLE departments" in prompt and "\n\nInstructions:" in prompt
+
+
+def test_judge_after_cav_can_overturn_with_single_rival(config):
+    records = [_record("big", False)] * 3 + [_record("lone", True)]
+    ids, weights, judgments = ["q"], config["ranking"], {"q": {pair_key("big", "lone"): 0.0}}
+    assert not _judged(records, 0, ids, weights, judgments, margin=0.1)  # default needs a rival of >= 2
+    assert _judged(records, 0, ids, weights, judgments, margin=0.1, min_rival=1)

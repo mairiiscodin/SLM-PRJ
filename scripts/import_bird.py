@@ -42,7 +42,7 @@ def main():
         items = stratified(items, args.sample, args.seed)
     root = args.database_root.resolve(strict=True)
     base = args.output.resolve().parent
-    tables = os.path.relpath(args.tables.resolve(strict=True), base) if args.tables else None
+    tables = Path(os.path.relpath(args.tables.resolve(strict=True), base)).as_posix() if args.tables else None
     records, failing = [], []
     for index, item in enumerate(items):
         db_id = item["db_id"]
@@ -61,7 +61,7 @@ def main():
         finally:
             connection.close()
         record = {"id": f"bird_{item.get('question_id', index)}", "db_id": db_id,
-                  "db_path": os.path.relpath(path, base),
+                  "db_path": Path(os.path.relpath(path, base)).as_posix(),
                   "question": item["question"], "evidence": item.get("evidence", ""),
                   "gold_sql": gold, "difficulty": item.get("difficulty", "unknown"),
                   "tags": [], "source": "BIRD (user supplied)", "language": "en"}

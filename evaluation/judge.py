@@ -7,6 +7,8 @@ selection_study --judge for every budget and permutation without further model c
 --mode merge (default), as CSC-SQL's merge revision: the paper prompt is extended with the two
 queries and their result previews, the model writes the SQL again (--samples draws), and each
 draw votes for the cluster whose result it reproduces. This uses what the model is trained for.
+--cav judges the top pairs left after CAV-3 drops flagged candidates (use with --min-size 1), the
+pairs selection_study's "CAV + judge" asks about; pairs already in judgments-<mode>.jsonl are reused.
 --mode ab asks "A or B?" and reads the next-token probabilities in both orders. SLM-SQL-1.5B
 gives ~0.5 for every pair there (it was trained to write SQL, not to compare it); the mode stays
 for judge models that can.
@@ -158,9 +160,11 @@ def _ab_pairs(judge, row, shown, fill):
     return pairs
 
 
-def _merge_pairs(judge, row, item, shown, hint, args):
+def _merge_pairs(judge, row, item, shown, hint, args, known=()):
     pairs, draws = {}, {}
     for x, y in combinations(shown, 2):
+        if pair_key(x, y) in known:
+            continue
         listing = "".join(f"\nQuery {i}:\n{sql}\nResult {i}: {result}\n"
                           for i, (sql, result) in enumerate((shown[x], shown[y]), 1))
         prompt = base_prompt(row, item, hint)
@@ -196,7 +200,14 @@ def collect(args):
         # Dataset-relative paths become absolute so the prompt builder finds tables.json.
         items = {i["id"]: dict(i, tables_path=str((args.dataset.parent / i["tables_path"]).resolve()))
                  if i.get("tables_path") else i for i in dataset}
-    out = args.output or args.pool_dir / f"judgments-{args.mode}.jsonl"
+    known = {}
+    if args.cav:
+        # Imported here: selection_study imports this module.
+        from evaluation.selection_study import CHECKS, _clean, enrich
+        enrich(rows, None, config, args.pool_dir / "candidate_flags.json")
+        plain = args.pool_dir / f"judgments-{args.mode}.jsonl"
+        known = load(plain) if plain.exists() else {}
+    out = args.output or args.pool_dir / f"judgments-{args.mode}{'-cav' if args.cav else ''}.jsonl"
     done = {json.loads(line)["id"] for line in out.read_text(encoding="utf-8").splitlines() if line.strip()} \
         if out.exists() else set()
     executor = SQLExecutor(config["execution"])
@@ -205,9 +216,11 @@ def collect(args):
         for index, row in enumerate(rows, 1):
             if row["id"] in done:
                 continue
-            groups = clusters(row["pool"], args.min_size)[: args.top]
+            pool = _clean(row["pool"], CHECKS) if args.cav else row["pool"]
+            groups = clusters(pool, args.min_size)[: args.top]
             pairs, draws, start = {}, {}, time.perf_counter()
-            if len(groups) >= 2:
+            if len(groups) >= 2 and not all(pair_key(x[0]["result"], y[0]["result"]) in known.get(row["id"], {})
+                                            for x, y in combinations(groups, 2)):
                 judge = judge or Judge(config)
                 database = Path(row["db"])
                 shown = {g[0]["result"]: (g[0]["sql"], preview(executor.execute(database, g[0]["sql"])))
@@ -218,7 +231,7 @@ def collect(args):
                     fill = dict(question=row["question"], evidence=f"Evidence:\n{hint}\n\n" if hint.strip() else "")
                     pairs = _ab_pairs(judge, row, shown, fill)
                 else:
-                    pairs, draws = _merge_pairs(judge, row, item, shown, hint, args)
+                    pairs, draws = _merge_pairs(judge, row, item, shown, hint, args, known.get(row["id"], {}))
             handle.write(json.dumps({"id": row["id"], "pairs": pairs, "draws": draws,
                                      "ms": (time.perf_counter() - start) * 1000}) + "\n")
             handle.flush()
@@ -252,7 +265,8 @@ def main():
     parser.add_argument("--top", type=int, default=2, help="Judge pairs among this many largest clusters")
     parser.add_argument("--samples", type=int, default=4, help="merge: re-written SQL draws per pair")
     parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--output", type=Path, help="Default: <pool_dir>/judgments-<mode>.jsonl")
+    parser.add_argument("--cav", action="store_true", help="Judge the top clusters left after CAV-3 (see above)")
+    parser.add_argument("--output", type=Path, help="Default: <pool_dir>/judgments-<mode>[-cav].jsonl")
     collect(parser.parse_args())
 
 

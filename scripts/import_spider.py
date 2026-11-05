@@ -23,7 +23,7 @@ def main():
     root = args.spider_root.resolve(strict=True)
     items = json.loads((root / args.split).read_text(encoding="utf-8"))
     base = args.output.resolve().parent
-    tables = os.path.relpath(root / "tables.json", base)
+    tables = Path(os.path.relpath(root / "tables.json", base)).as_posix()
     records, failing = [], []
     for index, item in enumerate(items):
         path = root / "database" / item["db_id"] / f"{item['db_id']}.sqlite"
@@ -39,7 +39,7 @@ def main():
             connection.close()
         records.append({
             "id": f"spider_{Path(args.split).stem}_{index}", "db_id": item["db_id"],
-            "db_path": os.path.relpath(path, base), "tables_path": tables,
+            "db_path": Path(os.path.relpath(path, base)).as_posix(), "tables_path": tables,
             "question": item["question"], "evidence": "", "gold_sql": item["query"],
             "difficulty": hardness(item["sql"]), "tags": [], "source": "Spider", "language": "en",
         })

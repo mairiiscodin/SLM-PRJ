@@ -29,7 +29,8 @@ from databases.create_student_db import DEFAULT_DB, create_database
 from evaluation.judge import load as load_judgments, preference
 from evaluation.run_sweep import LEVELS, _batch_cost, _candidates, _read_pool, _select
 
-BUDGETS = [("fixed", 4), ("fixed", 8), ("fixed", 16),
+# Fixed budgets above the pool size are skipped (K=32/64 need a merged pool, scripts/merge_pools.py).
+BUDGETS = [("fixed", 4), ("fixed", 8), ("fixed", 16), ("fixed", 32), ("fixed", 64),
            ("adaptive", ([4, 4, 8], 0.5, 2)), ("adaptive", ([4, 4, 8], 0.75, 2))]
 FEATURES = ["vote", "log_size", "degenerate", "ungrounded", "bad_join", "duplicates",
             "log_rows", "columns", "sql_length"]
@@ -153,15 +154,16 @@ def make_selectors(weights, rankers, judgments=None, ids=None, margin=0.0):
     if judgments is not None:
         cav2 = [c for c in CHECKS if c != "degenerate"]
         selectors["judge top-2"] = lambda records, q: _judged(records, q, ids, weights, judgments, margin)
+        # After CAV a single surviving candidate may be the rival (judge --cav judges those pairs).
         selectors["CAV-2 + judge"] = lambda records, q: _judged(
-            _clean(records, cav2), q, ids, weights, judgments, margin)
+            _clean(records, cav2), q, ids, weights, judgments, margin, min_rival=1)
         selectors["CAV + judge"] = lambda records, q: _judged(
-            _clean(records, CHECKS), q, ids, weights, judgments, margin)
+            _clean(records, CHECKS), q, ids, weights, judgments, margin, min_rival=1)
     return selectors
 
 
-def _judged(records, q, ids, weights, judgments, margin):
-    """Vote, then let the judge overturn it in favour of the largest rival cluster (>= 2 votes)."""
+def _judged(records, q, ids, weights, judgments, margin, min_rival=2):
+    """Vote, then let the judge overturn it in favour of the largest rival cluster (>= min_rival votes)."""
     candidates = _candidates(records)
     group_candidates(candidates)
     chosen = rank_candidates(candidates, weights)
@@ -169,7 +171,7 @@ def _judged(records, q, ids, weights, judgments, margin):
         return False
     winner = records[chosen.id]
     sizes = Counter(r["result"] for r in records if r["success"])
-    rivals = [h for h, n in sizes.items() if h != winner["result"] and n >= 2]
+    rivals = [h for h, n in sizes.items() if h != winner["result"] and n >= min_rival]
     if rivals:
         challenger = max(rivals, key=sizes.get)
         p = preference(judgments, ids[q], winner["result"], challenger)
@@ -244,12 +246,17 @@ def study(args):
     rng = random.Random(config["seed"])
     orders = [list(range(len(row["pool"]))) for row in rows]
     permutations = [orders] + [[rng.sample(o, len(o)) for o in orders] for _ in range(args.permutations)]
-    judgments = load_judgments(args.judge) if args.judge else None
+    judgments = None
+    for path in args.judge or []:
+        for qid, pairs in load_judgments(path).items():
+            judgments = judgments or {}
+            judgments.setdefault(qid, {}).update(pairs)
     selectors = make_selectors(config["ranking"], rankers, judgments, [row["id"] for row in rows], args.judge_margin)
     sample = dict(config["sampling"], max_candidates=len(rows[0]["pool"]))
     boot_rng = random.Random(config["seed"] + 1)
     summary, per_question = [], []
-    for budget in BUDGETS:
+    pool_size = min(len(row["pool"]) for row in rows)
+    for budget in [b for b in BUDGETS if b[0] != "fixed" or b[1] <= pool_size]:
         base_q = None
         for name, select in selectors.items():
             variants = [(name, [])]
@@ -344,7 +351,8 @@ def main():
                         help="strict multiset EX, CSC-SQL set EX, or Spider test-suite style EX")
     parser.add_argument("--exclude-vacuous-gold", action="store_true",
                         help="Drop questions whose gold result is empty or only NULL/0 (robustness check)")
-    parser.add_argument("--judge", type=Path, help="judgments.jsonl from evaluation.judge; adds judge selectors")
+    parser.add_argument("--judge", type=Path, nargs="+",
+                        help="judgments*.jsonl from evaluation.judge (merged); adds judge selectors")
     parser.add_argument("--judge-margin", type=float, default=0.1,
                         help="Overturn the vote only when the judge prefers the rival with p > 0.5 + margin")
     parser.add_argument("--output", type=Path, default=ROOT / "results" / "selection")
