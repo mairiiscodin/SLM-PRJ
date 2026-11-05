@@ -414,23 +414,61 @@ Số của bài báo (Sheng & Xu, 2025, [arXiv 2507.22478](https://arxiv.org/abs
 
 | Cấu hình bài báo | Dev EX % | Project, cùng số mẫu sinh |
 |---|---|---|
-| 64 mẫu + CSC (SLM-SQL đầy đủ) | 67,08 | – |
-| 16 mẫu + CSC | 64,84 | CAV-3 K=16: 66,1 |
-| 64 mẫu, bỏ CSC (vote) | 61,95 | Vote K=16: 61,7 |
-| Theo độ khó, 64 mẫu + CSC (simple / moderate / challenging) | 73,30 / 59,91 / 51,03 | CAV-3 K=16: 72,8 / 58,0 / 49,0 |
+| 64 mẫu + CSC (SLM-SQL đầy đủ) | 67,08 | CAV-3 K=64: 67,08 |
+| 16 mẫu + CSC | 64,84 | CAV-3 K=16: 66,1 (trung bình các tập 16 trong 64 mẫu: 65,5) |
+| 64 mẫu, bỏ CSC (vote) | 61,95 | Vote K=64: 61,5 |
+| Theo độ khó, 64 mẫu + CSC (simple / moderate / challenging) | 73,30 / 59,91 / 51,03 | CAV-3 K=64: 73,9 / 58,8 / 49,7 |
 
 Bảng đầy đủ (ablation từng kiểm tra, độ tin cậy kiểm tra, adaptive τ = 0,5) và hình: [results/selection-bird-dev-vllm/](results/selection-bird-dev-vllm/tables.md).
 
 Nhận xét:
 
-- **Tái lập khớp bài báo**: vote 16 mẫu đạt 61,7, gần bằng vote 64 mẫu của bài báo (61,95). Pool sinh bằng vLLM trên Kaggle dùng được để so sánh.
+- **Tái lập khớp bài báo**: vote 64 mẫu đạt 61,5, gần bằng vote 64 mẫu của bài báo (61,95). Pool sinh bằng vLLM trên Kaggle dùng được để so sánh.
 - **Cùng 16 mẫu, CAV-3 (66,1) cao hơn CSC của bài báo (64,84)** mà không gọi thêm model: CAV-3 chỉ chạy lại SQL và kiểm tra kết quả (khoảng 4 ms/ứng viên), không cần gold. CAV-3 với 8 mẫu (64,4) gần bằng 16 mẫu + CSC.
-- **Thấp hơn cấu hình đầy đủ 67,08 khoảng 1 điểm**, nhưng bài báo dùng gấp 4 lần số mẫu cộng merge revision; 67,08 nằm trong CI95 của CAV-3 K=16.
+- **Với 16 mẫu, CAV-3 thấp hơn cấu hình đầy đủ 67,08 khoảng 1 điểm**, nhưng bài báo dùng gấp 4 lần số mẫu cộng merge revision. Cùng 64 mẫu thì bằng nhau: [mục dưới](#64-mẫucâu-cùng-số-mẫu-với-cấu-hình-đầy-đủ-của-bài-báo).
 - Không phải so sánh ghép cặp: pool, seed và phần cứng khác nhau, bài báo không công bố kết quả từng câu. Chỉ kết luận được "ngang hoặc hơn ở cùng 16 mẫu", không kết luận "vượt có ý nghĩa thống kê".
 - So với vote trên cùng pool, cải thiện chắc chắn ở mọi ngân sách (+3,1 đến +4,4 điểm, p < 0,001), thu hẹp khoảng 30% khoảng cách tới oracle. Re-ranker học được không hơn CAV-3 (chênh ≤ 0,1 điểm).
 - Ablation (K=16): riêng `degenerate` +3,5, riêng `ungrounded` +1,9, riêng `bad_join` +1,1. `bad_join` có precision thấp nhất (84% ứng viên bị gắn cờ là sai, so với 97–99% của hai kiểm tra kia).
 - Adaptive 4-4-8 (τ = 0,75) tiết kiệm 51% số mẫu nhưng mất 1,6 điểm so với CAV-3 K=16.
 - Trong 24.544 mẫu: 89% chạy được, 9% lỗi schema (sai tên bảng/cột), 1% lỗi cú pháp, 5 mẫu timeout. Oracle theo database thấp nhất ở `card_games` (59,2%), cao nhất ở `superhero` (90,7%).
+
+#### 64 mẫu/câu: cùng số mẫu với cấu hình đầy đủ của bài báo
+
+Pool trên được sinh thêm 48 mẫu/câu trên Kaggle (2×T4, cùng thiết lập, seed 42 + 100000 + i), ghép thành 64 mẫu cho cả 1534 câu ([cách chạy](#sinh-pool-trên-kaggle-bằng-vllm-đủ-16-mẫu-cả-1534-câu)). 48 mẫu mới có độ chính xác trung bình 51,3%, gần bằng 16 mẫu cũ (51,4%). Cấu hình CAV-3 giữ nguyên, không chỉnh lại. K < 64 lấy trung bình trên 201 hoán vị của cả 64 mẫu, nên K=16 ở đây (65,5) khác bảng trên (66,1, chỉ dùng 16 mẫu đầu); 65,5 là ước lượng ổn định hơn.
+
+| Chọn đáp án (cùng pool) | Mẫu/câu | EX % [CI95] | Δ vs vote [CI95] | Mất / cứu | p | Simple | Moderate | Challenging |
+|---|---|---|---|---|---|---|---|---|
+| Vote | 16 | 60,8 [58,5–63,1] | | | | 68,2 | 51,8 | 42,6 |
+| CAV-3 | 16 | 65,5 [63,3–67,9] | +4,7 [+3,9, +5,6] | 6 / 73 | <0,001 | 72,4 | 57,6 | 47,3 |
+| Vote | 32 | 61,3 [58,9–63,7] | | | | 68,6 | 52,5 | 43,1 |
+| CAV-3 | 32 | 66,3 [64,0–68,5] | +5,0 [+4,0, +6,1] | 8 / 86 | <0,001 | 73,2 | 58,3 | 48,4 |
+| Vote (self-consistency) | 64 | 61,5 [59,1–64,0] | | | | 68,6 | 53,2 | 42,8 |
+| CAV-2 (grounding + join) | 64 | 65,3 [62,8–67,6] | +3,7 [+2,7, +4,8] | 9 / 66 | <0,001 | 72,2 | 56,9 | 47,6 |
+| **CAV-3** | 64 | **67,08 [64,8–69,3]** | **+5,5 [+4,4, +6,8]** | 9 / 94 | <0,001 | 73,9 | 58,8 | 49,7 |
+| Learned re-ranker (10-fold CV) | 64 | 67,2 [64,8–69,6] | +5,7 [+4,5, +6,8] | 1 / 88 | <0,001 | 73,7 | 59,7 | 49,7 |
+| Oracle (có ít nhất 1 mẫu đúng) | 64 | 82,8 | | | | | | |
+| **Bài báo, 64 mẫu + CSC** | 64 | **67,08** | | | | 73,30 | 59,91 | 51,03 |
+
+Kiểm tra rò rỉ: các kiểm tra của CAV được thiết kế khi xem `bird_dev200`, nên tách riêng 1334 câu còn lại (paired bootstrap theo câu hỏi):
+
+| Tập câu | Mẫu/câu | Vote | CAV-3 | Δ [CI95] |
+|---|---|---|---|---|
+| 1334 câu ngoài `bird_dev200` | 16 | 60,2 | 64,8 | +4,6 [+3,6, +5,5] |
+| 1334 câu ngoài `bird_dev200` | 32 | 60,7 | 65,6 | +4,9 [+3,8, +6,0] |
+| 1334 câu ngoài `bird_dev200` | 64 | 60,9 | 66,4 | +5,5 [+4,3, +6,9] |
+| 200 câu `bird_dev200` | 64 | 66,0 | 71,5 | +5,5 [+2,5, +9,0] |
+
+Bảng đầy đủ và hình: [results/selection-bird-dev-vllm-64/](results/selection-bird-dev-vllm-64/tables.md).
+
+Nhận xét:
+
+- **Bằng, chưa vượt 67,08**: CAV-3 đúng 1029/1534 câu = 67,08%. Mức tăng trên vote cũng tương đương (+5,5 so với +5,1 của CSC), mà không cần model merge-revision. Pool và seed khác bài báo nên chỉ kết luận được "ngang bằng".
+- Theo độ khó: CAV-3 cao hơn bài báo ở simple (+0,6) nhưng thấp hơn ở moderate (−1,1) và challenging (−1,4).
+- **Tăng mẫu có lợi cho CAV-3 hơn cho vote**: từ 16 lên 64 mẫu, CAV-3 tăng 1,5 điểm còn vote tăng 0,7. Đổi lại chi phí sinh gấp 4 lần.
+- **Mức tăng không đến từ việc chỉnh trên dev200**: trên 1334 câu ngoài `bird_dev200`, Δ vẫn là +5,5, bằng trên toàn tập. EX tuyệt đối ở đó là 66,4, vì 200 câu kia dễ hơn với model (vote 66,0 so với 60,9).
+- Re-ranker chỉ hơn CAV-3 0,1 điểm và học từ nhãn của chính BIRD dev (10-fold CV), nên số chính vẫn là CAV-3.
+- Ablation (K=64): riêng `degenerate` +4,6, riêng `ungrounded` +2,7, riêng `bad_join` +1,2. Bỏ `bad_join` vẫn đạt +5,5, tức kiểm tra này gần như không thêm gì khi đã có hai kiểm tra kia.
+- Oracle tăng từ 76,7 (K=16) lên 82,8 (K=64), nhưng CAV-3 chỉ thu hẹp 26% khoảng cách (K=16: 30%). Muốn vượt 67,08 cần bước chọn tốt hơn trong các ứng viên, không phải sinh thêm mẫu.
 
 ### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 200 câu)
 
