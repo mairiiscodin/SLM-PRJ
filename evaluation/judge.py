@@ -80,12 +80,17 @@ def _create_statements(db_path: Path) -> list:
         connection.close()
 
 
+def mentions(table: str, text: str) -> bool:
+    """Lower-case table name appears in lower-case SQL, bare or quoted."""
+    return bool(re.search(rf"(?<![\w`\"]){re.escape(table)}(?![\w`\"])", text)) \
+        or f"`{table}`" in text or f'"{table}"' in text
+
+
 def schema_for(db_path: Path, sqls: list) -> str:
     """CREATE statements of the tables either query mentions (all tables when none match)."""
     tables = _create_statements(db_path)
     text = " ".join(sqls).lower()
-    used = [sql for name, sql in tables if re.search(rf"(?<![\w`\"]){re.escape(name.lower())}(?![\w`\"])", text)
-            or f"`{name.lower()}`" in text or f'"{name.lower()}"' in text]
+    used = [sql for name, sql in tables if mentions(name.lower(), text)]
     return "\n".join(s.strip() for s in (used or [sql for _, sql in tables]) if s)
 
 

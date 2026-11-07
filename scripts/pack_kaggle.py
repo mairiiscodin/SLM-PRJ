@@ -27,6 +27,7 @@ def _files(path: Path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", type=Path, nargs="+", required=True, help="Dataset JSONs (import_bird output)")
+    parser.add_argument("--extra", type=Path, nargs="*", default=[], help="More project files, e.g. the merge pairs")
     parser.add_argument("--output", type=Path, default=ROOT / "dist" / "adaptive-slm-sql-kaggle.zip")
     args = parser.parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -34,6 +35,8 @@ def main():
     for name in CODE:
         for path in _files(ROOT / name):
             needed[path.relative_to(ROOT).as_posix()] = path
+    for path in args.extra:
+        needed[path.resolve().relative_to(ROOT).as_posix()] = path.resolve()
     datasets = {}
     for dataset in args.dataset:
         dataset = dataset.resolve()

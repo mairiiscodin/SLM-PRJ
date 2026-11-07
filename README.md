@@ -265,6 +265,21 @@ python -m evaluation.selection_report results/selection-bird-dev-vllm-64
 
 `merge_pools` giữ thứ tự (16 mẫu cũ trước) và báo lỗi nếu thiếu hoặc trùng câu; `selection_study` thêm ngân sách K = 32 và 64 khi pool đủ lớn. Cấu hình đánh giá cố định từ trước (CAV-3, không chỉnh ngưỡng trên dev); báo cáo kèm số trên 1334 câu ngoài `bird_dev200`.
 
+**Merge revision bằng model của bài báo**: `evaluation.judge` dùng chính SLM-SQL-1.5B với prompt tự viết, còn bài báo dùng model riêng `cycloneboy/CscSQL-Merge-Qwen2.5-Coder-1.5B-Instruct` (CC BY-NC 4.0). `evaluation.vllm_merge` dùng model đó với prompt của CSC-SQL, 8 lần sinh mỗi cặp, trên 2 loại cặp: 2 cụm đầu của vote (như bài báo) và 2 cụm đầu sau CAV-3. Tạo cặp ở máy local rồi đóng gói lại:
+
+```powershell
+python -m evaluation.vllm_merge prepare results/bird-dev-vllm-64 --flags results/selection-bird-dev-vllm-64/candidate_flags.json --output data/benchmarks/bird_dev_merge_pairs.jsonl
+python scripts/pack_kaggle.py --dataset data/benchmarks/bird_dev.json data/benchmarks/bird_dev200.json --extra data/benchmarks/bird_dev_merge_pairs.jsonl
+```
+
+Upload zip (*New Version*), chạy `notebooks/kaggle_vllm_merge.ipynb`, tải `bird-dev-merge.zip` về và giải nén thành `results/bird-dev-merge/shard0`, `shard1`. Đánh giá không cần GPU:
+
+```powershell
+python -m evaluation.merge_study results/bird-dev-vllm-64 results/bird-dev-merge/shard0 results/bird-dev-merge/shard1 --flags results/selection-bird-dev-vllm-64/candidate_flags.json --tune data/benchmarks/bird_dev200.json --output results/merge-study-bird-dev
+```
+
+`merge_study` chọn ngưỡng gọi model (gate) trên `bird_dev200`, rồi báo cáo riêng 1334 câu còn lại; đó là số dùng để so sánh.
+
 Tách tập chỉnh ngưỡng và tập đánh giá cuối; báo cáo rõ subset, ngôn ngữ, seed, model, prompt, giới hạn thời gian/kết quả và số câu bị lỗi. Nếu dịch câu hỏi tiếng Anh sang tiếng Việt, kiểm tra bản dịch và báo cáo thành một tập riêng.
 
 ## 9. Evaluation và ablation
@@ -470,6 +485,32 @@ Nhận xét:
 - Ablation (K=64): riêng `degenerate` +4,6, riêng `ungrounded` +2,7, riêng `bad_join` +1,2. Bỏ `bad_join` vẫn đạt +5,5, tức kiểm tra này gần như không thêm gì khi đã có hai kiểm tra kia.
 - Oracle tăng từ 76,7 (K=16) lên 82,8 (K=64), nhưng CAV-3 chỉ thu hẹp 26% khoảng cách (K=16: 30%). Muốn vượt 67,08 cần bước chọn tốt hơn trong các ứng viên, không phải sinh thêm mẫu.
 
+#### Merge revision bằng model của bài báo (64 mẫu)
+
+Chạy ngày 07/11/2026 trên Kaggle (2×T4, vLLM, FP16), model `cycloneboy/CscSQL-Merge-Qwen2.5-Coder-1.5B-Instruct`, prompt merge của CSC-SQL, 8 lần sinh mỗi cặp ([cách chạy](#sinh-pool-trên-kaggle-bằng-vllm-đủ-16-mẫu-cả-1534-câu)). Có 1705 cặp trên 1326 câu: cặp 2 cụm đầu của vote (như bài báo) và cặp còn lại sau CAV-3. 98,8% lần sinh chạy được. 208 câu không có cụm đối thủ nên giữ nguyên đáp án. Gate (chỉ gọi merge khi cụm đối thủ có ít nhất gate × số phiếu của cụm thắng) được chốt trên `bird_dev200` trước khi xem 1334 câu còn lại.
+
+| Chọn đáp án (cùng pool 64 mẫu) | 1334 câu held-out | 1534 câu | Δ vs CAV-3, 1534 câu [CI95] | Mất / cứu | p |
+|---|---|---|---|---|---|
+| Vote | 60,87 | 61,54 | −5,54 [−6,84, −4,30] | 94 / 9 | <0,001 |
+| **CSC tái lập: vote + merge** | 64,62 | 65,12 | **−1,96 [−3,00, −1,04]** | 47 / 17 | <0,001 |
+| CAV-3 | 66,42 | 67,08 | | | |
+| CAV-3 + merge (gate 0,75) | 66,64 | 67,28 | +0,20 [−0,13, +0,59] | 2 / 5 | 0,45 |
+| CAV-3 + merge, chỉ chọn trong cặp (gate 0,75) | 66,64 | **67,34** | +0,26 [+0,00, +0,59] | 1 / 5 | 0,22 |
+| Bài báo, 64 mẫu + CSC | | 67,08 | | | |
+
+```powershell
+python -m evaluation.merge_study results/bird-dev-vllm-64 results/bird-dev-merge/shard0 results/bird-dev-merge/shard1 --flags results/selection-bird-dev-vllm-64/candidate_flags.json --tune data/benchmarks/bird_dev200.json --output results/merge-study-bird-dev
+```
+
+Nhận xét:
+
+- **Cùng pool, CAV-3 tốt hơn phương pháp CSC của bài báo 1,96 điểm (p < 0,001).** Đây là so sánh ghép cặp (cùng câu, cùng ứng viên), chắc chắn hơn việc đặt cạnh con số 67,08. CAV-3 chỉ chạy lại SQL, còn CSC cần thêm một model 1,5B.
+- CSC tái lập tăng +3,6 điểm so với vote, ít hơn +5,1 của bài báo. Khác biệt có thể đến từ việc không gọi merge cho câu chỉ có một cụm, FP16 thay vì BF16, và pool khác; chưa kiểm chứng.
+- **Merge thêm vào CAV-3 không cải thiện có ý nghĩa**: 67,34 chỉ hơn 4 câu (p = 0,22), held-out +0,22. Với mọi gate và cả hai chế độ (khám phá thêm sau khi chốt), held-out tốt nhất là 66,79 (+0,37).
+- 84,5% lần sinh trả về kết quả của draft 1 (cụm đang thắng), 14,6% của cụm đối thủ. Ở 56 cặp sau CAV mà merge nghiêng về cụm đối thủ, chỉ 28 cặp đúng: model không phân biệt được hai cụm CAV còn để lại. Có thể một phần là thiên vị vị trí (cụm thắng luôn là draft 1); muốn kiểm chứng phải chạy lại với thứ tự đảo.
+- Kết quả đầy đủ: [results/merge-study-bird-dev/](results/merge-study-bird-dev/tables.md).
+- Thử nghiệm không cải thiện (chưa đưa vào code): gom cụm theo tập hợp như metric BIRD (Δ 0,00), luật kiểm tra evidence (không tăng trên dev200), re-ranker thêm đặc trưng (held-out −0,15 so với CAV-3).
+
 ### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 200 câu)
 
 Chạy ngày 31/10–01/11/2026 trên RTX 2050 4 GB, model `cycloneboy/SLM-SQL-1.5B` (BF16), seed 42. Dữ liệu: 200/1534 câu BIRD dev, lấy phân tầng theo độ khó (121 simple, 60 moderate, 19 challenging), có evidence. Prompt và sampling theo bài báo (Appendix E.1, temperature 0.8, top-p 1.0, `max_new_tokens` 1024), nhưng sinh **adaptive 4-4-8** (τ = 0,75): câu nào 4 hoặc 8 mẫu đầu đã đồng thuận thì dừng. Metric `set` (EX chính thức của BIRD). CI95 từ 2000 lần bootstrap theo câu hỏi; p là McNemar so với vote trên cùng pool.
@@ -582,7 +623,7 @@ Image mặc định mock/CPU, không có PyTorch. Để dùng model thật cần
 
 Chưa có kết quả chứng minh tốt hơn paper. Dataset sinh viên nhỏ và một schema không đo khái quát hóa qua nhiều miền. Mock không phải AI. Các trọng số/threshold cần tuning trên tập riêng. SQL chạy được không bảo đảm đúng nghiệp vụ; trường hợp mọi query cùng trả rỗng dễ tạo đồng thuận sai.
 
-Tiếp theo có thể đánh giá BIRD Mini-Dev, dùng nhiều seed, kiểm định paired theo câu hỏi, mở rộng dữ liệu tiếng Việt được rà soát, chọn schema bằng retrieval, thêm merge CSC thực sự và đo chi phí token. Fine-tuning là dự án thực nghiệm riêng, cần train/dev/test không rò rỉ.
+Tiếp theo có thể đánh giá BIRD Mini-Dev, dùng nhiều seed, kiểm định paired theo câu hỏi, mở rộng dữ liệu tiếng Việt được rà soát, chọn schema bằng retrieval, chạy merge với thứ tự draft đảo ngược để đo thiên vị vị trí và đo chi phí token. Fine-tuning là dự án thực nghiệm riêng, cần train/dev/test không rò rỉ.
 
 Ứng dụng dành cho máy local, không cung cấp authentication hoặc sandbox tiến trình đủ cho dịch vụ công khai. Upload luôn được ghi vào tên file tạm do ứng dụng tạo rồi mở read-only; file gốc không bị sửa. Không gửi câu hỏi/database tới API ngoài. Hugging Face chỉ được truy cập khi tải/kiểm tra cache model; đặt local_files_only sau khi tải nếu cần offline. Streamlit telemetry đã tắt.
 
