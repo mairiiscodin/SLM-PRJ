@@ -9,6 +9,10 @@ uploads/
 results/*
 !results/.gitkeep
 !results/verification.md
+# Keep each study's summary table (small), not the pools.
+!results/*/
+results/*/*
+!results/*/tables.md
 data/benchmarks/
 # Spider (CC BY-SA 4.0) and ViText2SQL (no redistribution): download locally, never commit.
 data/external/
