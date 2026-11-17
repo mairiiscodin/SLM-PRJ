@@ -95,3 +95,43 @@ def test_extra_samples_use_offset_seeds_per_shard_and_merge(tmp_path, db, monkey
     assert len(merged[0]["batch_ms"]) == 2 and merged[0]["batch_size"] == 4
     with pytest.raises(ValueError, match="no extra samples"):
         merge(base, shards[0])
+
+
+def test_calls_are_packed_under_the_kv_budget_and_preempted_calls_are_redone(tmp_path, db, monkeypatch):
+    class _Small(_LLM):
+        """KV cache for about two questions; vLLM preempts whenever a call holds more than one."""
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.scheduler = SimpleNamespace(num_cumulative_preemption=0)
+            self.llm_engine = SimpleNamespace(scheduler=[self.scheduler],
+                                              cache_config=SimpleNamespace(num_gpu_blocks=700, block_size=16))
+
+        def generate(self, prompts, params, use_tqdm):
+            self.scheduler.num_cumulative_preemption += len(prompts) > 1
+            return super().generate(prompts, params, use_tqdm)
+
+    _fake_vllm(monkeypatch)
+    monkeypatch.setattr(sys.modules["vllm"], "LLM", _Small)
+    _LLM.calls = []
+    collect(_args(_dataset(tmp_path, db, count=5), tmp_path / "out", chunk=5))
+    # Budget 10080 tokens, 4 x 1024 new tokens per question: two questions per call, each call redone singly.
+    assert _LLM.calls == [[42, 43], [42], [43], [44, 45], [44], [45], [46]]
+    rows = _read_pool(tmp_path / "out" / "pool.jsonl")
+    assert [r["id"] for r in rows] == [f"q{i}" for i in range(5)] and all(len(r["pool"]) == 4 for r in rows)
+
+
+def test_keep_schema_prunes_the_prompt(tmp_path, db, monkeypatch):
+    seen = []
+
+    class _Recording(_LLM):
+        def generate(self, prompts, params, use_tqdm):
+            seen.extend(prompts)
+            return super().generate(prompts, params, use_tqdm)
+
+    _fake_vllm(monkeypatch)
+    monkeypatch.setattr(sys.modules["vllm"], "LLM", _Recording)
+    keep = tmp_path / "keep.json"
+    keep.write_text(json.dumps({"q0": [["students", "id"], ["students", "full_name"]]}), encoding="utf-8")
+    collect(_args(_dataset(tmp_path, db, count=2), tmp_path / "out", chunk=2, keep_schema=keep))
+    assert "CREATE TABLE classes" not in seen[0] and "CREATE TABLE students" in seen[0]
+    assert "CREATE TABLE classes" in seen[1]  # q1 is not in the file: full schema

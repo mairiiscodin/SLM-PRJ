@@ -510,6 +510,7 @@ Nhận xét:
 - 84,5% lần sinh trả về kết quả của draft 1 (cụm đang thắng), 14,6% của cụm đối thủ. Ở 56 cặp sau CAV mà merge nghiêng về cụm đối thủ, chỉ 28 cặp đúng: model không phân biệt được hai cụm CAV còn để lại. Có thể một phần là thiên vị vị trí (cụm thắng luôn là draft 1); muốn kiểm chứng phải chạy lại với thứ tự đảo.
 - Kết quả đầy đủ: [results/merge-study-bird-dev/](results/merge-study-bird-dev/tables.md).
 - Thử nghiệm không cải thiện (chưa đưa vào code): gom cụm theo tập hợp như metric BIRD (Δ 0,00), luật kiểm tra evidence (không tăng trên dev200), re-ranker thêm đặc trưng (held-out −0,15 so với CAV-3).
+- **Truy xuất giá trị mới** (`core/value_retrieval.py`, `--retrieval new`; mặc định vẫn là `paper`): khớp không phân biệt hoa thường/dấu câu, bỏ số 0 đầu (`40` → `'0040'`, `1994/3/3` → `'1994-03-03'`), khớp chuỗi trong dấu nháy (`'#'`, `'i'`), tối đa 3 giá trị/cột. Recall literal của gold SQL (`python -m evaluation.value_recall`, 1505 literal có trong DB): 95,5% → 98,1%, prompt dài như cũ, nhanh hơn 3 lần. Nhưng sinh lại pool 16 mẫu trên Kaggle (cùng seed, chỉ khác prompt, `results/bird-dev-newret`) **không tăng EX**: CAV-3 K=16 66,07 → 65,45 (mất/cứu 32/23, p = 0,28), vote 61,70 → 61,31. Ở 39 câu được thêm giá trị, model vốn đã dùng đúng literal trong 552/624 mẫu dù prompt cũ không có, vì giá trị thường đã nằm trong evidence.
 
 ### So sánh với bài báo: BIRD dev (SLM-SQL-1.5B, 200 câu)
 

@@ -136,19 +136,32 @@ def _relevant_values(db_path: str, question: str) -> dict:
     return relevant
 
 
-def schema_details(db_path: Path, db_info: dict, question: str) -> str:
+def column_examples(db_path: Path, question: str, retrieval: str = "paper") -> dict:
+    """Example values shown per `table.column` key (lowercase), at most 6, question-matched first."""
     sampled = _sampled_values(str(db_path))
-    relevant = _relevant_values(str(db_path), question)
+    if retrieval == "paper":
+        relevant = _relevant_values(str(db_path), question)
+    else:
+        from core.value_retrieval import retrieve_values
+        relevant = retrieve_values(str(db_path), question)
+    return {key: list(dict.fromkeys(relevant.get(key, []) + sampled.get(key, [])))[:6]
+            for key in set(sampled) | set(relevant)}
+
+
+def schema_details(db_path: Path, db_info: dict, question: str, retrieval: str = "paper", keep=None) -> str:
+    """keep: [[table, column], ...] to show (core.schema_pruning); None or empty shows the full schema."""
+    keep = {(t.lower(), c.lower()) for t, c in keep or []}
+    examples_by_column = column_examples(db_path, question, retrieval)
     names, comments, types = db_info["column_names_original"], db_info["column_names"], db_info["column_types"]
     primary = {i for k in db_info["primary_keys"] for i in (k if isinstance(k, list) else [k])}
     blocks = []
     for table_index, table in enumerate(db_info["table_names_original"]):
         columns, pk, fk = [], [], []
         for index, ((owner, column), (_, comment), column_type) in enumerate(zip(names, comments, types)):
-            if owner != table_index:
+            if owner != table_index or (keep and (table.lower(), column.lower()) not in keep):
                 continue
             key = f"{table}.{column}".lower()
-            examples = list(dict.fromkeys(relevant.get(key, []) + sampled.get(key, [])))[:6]
+            examples = examples_by_column.get(key, [])
             plain = column.lower() in (comment.lower(), comment.lower().replace(" ", "_"),
                                        comment.lower().replace(" ", "")) or not comment.strip()
             line = f"    {_identifier(column)} {column_type},"
@@ -162,6 +175,8 @@ def schema_details(db_path: Path, db_info: dict, question: str) -> str:
             for source, target in db_info["foreign_keys"]:
                 if source == index:
                     target_table = db_info["table_names_original"][names[target][0]]
+                    if keep and (target_table.lower(), names[target][1].lower()) not in keep:
+                        continue
                     fk.append(f"    CONSTRAINT fk_{table.lower().replace(' ', '_')}_{column.lower().replace(' ', '_')} "
                               f"FOREIGN KEY ({_identifier(column)}) REFERENCES {_identifier(target_table)} "
                               f"({_identifier(names[target][1])}),")
@@ -173,7 +188,8 @@ def schema_details(db_path: Path, db_info: dict, question: str) -> str:
     return "\n\n".join(blocks)
 
 
-def build_paper_prompt(question: str, db_path: Path, db_id: str, tables_path: Path, evidence: str = "") -> str:
+def build_paper_prompt(question: str, db_path: Path, db_id: str, tables_path: Path, evidence: str = "",
+                       retrieval: str = "paper", keep=None) -> str:
     question = f"{evidence}\n{question}" if evidence.strip() else question
-    details = schema_details(db_path, _tables(str(Path(tables_path).resolve()))[db_id], question)
+    details = schema_details(db_path, _tables(str(Path(tables_path).resolve()))[db_id], question, retrieval, keep)
     return TEMPLATE.format(db_details=details, question=question)
