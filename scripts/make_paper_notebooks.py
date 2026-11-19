@@ -18,54 +18,64 @@ BIRD = {"dataset": "data/benchmarks/bird_dev.json", "kaggle": "slmsql-bird-dev",
 SPIDER = {"dataset": "data/benchmarks/spider_dev.json", "kaggle": "slmsql-spider-dev",
           "label": "Spider dev (1034 câu)", "metric": "spider"}
 
-# notebook file name -> (benchmark, title, paper note, jobs [(RUN, MODEL, POOL, SEED_OFFSET)], hours)
+ROUND2_SEED = 300000  # round-2 samples differ from round 1 (seed 42 + offset + question index)
+BIRD_ROUND1 = ("Vòng 1: 64 mẫu/câu với schema đầy đủ (Vote@64 tái lập bài báo). Vòng 2: rút gọn schema theo SQL "
+               "của 32 mẫu đầu, sinh thêm 32 mẫu. Phương pháp mới = 32 mẫu đầu vòng 1 + 32 mẫu vòng 2 = 64 mẫu, "
+               "bằng ngân sách của bài báo.")
+
+# notebook file name -> (benchmark, title, paper note, jobs [(RUN, MODEL, POOL, SEED_OFFSET, ROUND2)], hours)
+# ROUND2 = samples of the pruned-schema round (<RUN>-prune<ROUND2>), schema kept from the first ROUND2 samples.
 NOTEBOOKS = {
-    "bird-dev_SLM-SQL-0.5B_64mau": (
-        BIRD, "BIRD dev · SLM-SQL-0.5B (Qwen2.5-Coder-0.5B, SFT + RL) · 64 mẫu",
-        "Bài báo Bảng 2: **56.87** (64 mẫu + CSC).",
-        [("bird-dev-0.5b-rl", "cycloneboy/SLM-SQL-0.5B", 64, 0)], "3–5 giờ"),
-    "bird-dev_SLM-SQL-0.6B_64mau": (
-        BIRD, "BIRD dev · SLM-SQL-0.6B (Qwen3-0.6B, SFT + RL) · 64 mẫu",
-        "Bài báo Bảng 2: **59.52** (64 mẫu + CSC).",
-        [("bird-dev-0.6b-rl", "cycloneboy/SLM-SQL-0.6B", 64, 0)], "4–6 giờ"),
-    "bird-dev_SLM-SQL-Base-1B_64mau": (
-        BIRD, "BIRD dev · SLM-SQL-Base-1B (Llama-3.2-1B, SFT) · 64 mẫu",
+    "bird-dev_SLM-SQL-0.5B_64mau_2vong": (
+        BIRD, "BIRD dev · SLM-SQL-0.5B (Qwen2.5-Coder-0.5B, SFT + RL) · 64 mẫu + vòng 2",
+        "Bài báo Bảng 2: **56.87** (64 mẫu + CSC). " + BIRD_ROUND1 + " **Vòng 1 đã chạy xong**: *Add Input* output "
+        "version cũ của notebook BIRD 0.5B để bỏ qua vòng 1 (chỉ chép lại pool), chỉ còn vòng 2 (khoảng 2–3 giờ).",
+        [("bird-dev-0.5b-rl", "cycloneboy/SLM-SQL-0.5B", 64, 0, 32)], "6–8 giờ (chỉ vòng 2: 2–3 giờ)"),
+    "bird-dev_SLM-SQL-0.6B_64mau_2vong": (
+        BIRD, "BIRD dev · SLM-SQL-0.6B (Qwen3-0.6B, SFT + RL) · 64 mẫu + vòng 2",
+        "Bài báo Bảng 2: **59.52** (64 mẫu + CSC). " + BIRD_ROUND1,
+        [("bird-dev-0.6b-rl", "cycloneboy/SLM-SQL-0.6B", 64, 0, 32)], "7–10 giờ"),
+    "bird-dev_SLM-SQL-Base-1B_64mau_2vong": (
+        BIRD, "BIRD dev · SLM-SQL-Base-1B (Llama-3.2-1B, SFT) · 64 mẫu + vòng 2",
         "Bài báo Bảng 2: **54.78** (SLM-SQL-1B, SFT + RL, 64 mẫu + CSC). Tác giả **chưa công bố** bản SFT + RL "
         "của Llama (`cycloneboy/SLM-SQL-1B` không tồn tại), nên notebook chạy bản SFT `SLM-SQL-Base-1B`: "
-        "kết quả dự kiến thấp hơn số của bài báo.",
-        [("bird-dev-1b-sft", "cycloneboy/SLM-SQL-Base-1B", 64, 0)], "4–6 giờ"),
-    "bird-dev_SLM-SQL-1.3B_64mau": (
-        BIRD, "BIRD dev · SLM-SQL-1.3B (deepseek-coder-1.3b, SFT + RL) · 64 mẫu",
-        "Bài báo Bảng 2: **62.19** (64 mẫu + CSC). Không dùng lại pool cũ `results/bird-dev-slm13`: nó được sinh "
-        "trước bản sửa KV-cache của `vllm_collect` nên 30% mẫu không có SQL (vote 39.4). Model 1.3B có 16 KV head "
-        "nên chậm: 64 mẫu cần **khoảng 16–24 giờ**, tức 2–3 version (xem phần *Chạy tiếp*).",
-        [("bird-dev-1.3b-rl", "cycloneboy/SLM-SQL-1.3B", 64, 0)], "16–24 giờ (2–3 version)"),
+        "kết quả dự kiến thấp hơn số của bài báo. " + BIRD_ROUND1,
+        [("bird-dev-1b-sft", "cycloneboy/SLM-SQL-Base-1B", 64, 0, 32)], "7–10 giờ"),
+    "bird-dev_SLM-SQL-1.3B_64mau_2vong": (
+        BIRD, "BIRD dev · SLM-SQL-1.3B (deepseek-coder-1.3b, SFT + RL) · 64 mẫu + vòng 2",
+        "Bài báo Bảng 2: **62.19** (64 mẫu + CSC). " + BIRD_ROUND1 + " Không dùng lại pool cũ `results/bird-dev-slm13`: "
+        "nó được sinh trước bản sửa KV-cache của `vllm_collect` nên 30% mẫu không có SQL (vote 39.4). Model 1.3B "
+        "có 16 KV head nên chậm: **khoảng 24–36 giờ**, tức 3 version (xem phần *Chạy tiếp*). Muốn tiết kiệm "
+        "quota: đổi số mẫu vòng 1 thành 32 (mất cột Vote@64/CAV-3@64, vẫn có phương pháp mới).",
+        [("bird-dev-1.3b-rl", "cycloneboy/SLM-SQL-1.3B", 64, 0, 32)], "24–36 giờ (3 version)"),
 }
 SPIDER_FAMILIES = [
     ("0.5B", "Qwen2.5-Coder-0.5B-Instruct", "0.5b", "Qwen/Qwen2.5-Coder-0.5B-Instruct", "cycloneboy/SLM-SQL-Base-0.5B",
-     "cycloneboy/SLM-SQL-0.5B", "42.13 / 65.31 / 70.60", "1–2 giờ"),
+     "cycloneboy/SLM-SQL-0.5B", "42.13 / 65.31 / 70.60", "2–3 giờ"),
     ("0.6B", "Qwen3-0.6B", "0.6b", "Qwen/Qwen3-0.6B", "cycloneboy/SLM-SQL-Base-0.6B", "cycloneboy/SLM-SQL-0.6B",
-     "63.19 / 68.02 / 72.05", "2–3 giờ"),
+     "63.19 / 68.02 / 72.05", "3–5 giờ"),
     ("1B", "Llama-3.2-1B-Instruct", "1b", "unsloth/Llama-3.2-1B-Instruct", "cycloneboy/SLM-SQL-Base-1B", None,
-     "30.79 / 63.77 / 67.63", "1–2 giờ"),
+     "30.79 / 63.77 / 67.63", "2–3 giờ"),
     ("1.3B", "deepseek-coder-1.3b-instruct", "1.3b", "deepseek-ai/deepseek-coder-1.3b-instruct",
-     "cycloneboy/SLM-SQL-Base-1.3B", "cycloneboy/SLM-SQL-1.3B", "48.23 / 72.86 / 75.47", "4–6 giờ"),
+     "cycloneboy/SLM-SQL-Base-1.3B", "cycloneboy/SLM-SQL-1.3B", "48.23 / 72.86 / 75.47", "6–9 giờ"),
     ("1.5B", "Qwen2.5-Coder-1.5B-Instruct", "1.5b", "Qwen/Qwen2.5-Coder-1.5B-Instruct",
-     "cycloneboy/SLM-SQL-Base-1.5B", "cycloneboy/SLM-SQL-1.5B", "63.54 / 74.53 / 75.15", "2–3 giờ"),
+     "cycloneboy/SLM-SQL-Base-1.5B", "cycloneboy/SLM-SQL-1.5B", "63.54 / 74.53 / 75.15", "3–5 giờ"),
 ]
 for size, base_name, slug, base, sft, rl, paper, hours in SPIDER_FAMILIES:
-    jobs = ([(f"spider-dev-{slug}-rl", rl, 16, 0)] if rl else []) + [
-        (f"spider-dev-{slug}-sft", sft, 16, 0), (f"spider-dev-{slug}-base", base, 16, 0)]
+    jobs = ([(f"spider-dev-{slug}-rl", rl, 16, 0, 8)] if rl else []) + [
+        (f"spider-dev-{slug}-sft", sft, 16, 0, 8), (f"spider-dev-{slug}-base", base, 16, 0, 8)]
     note = (f"Bài báo Bảng 3, Spider **Dev EX, cột SC** (base / SFT / SFT + RL): **{paper}**. "
-            "Chạy lần lượt " + ", ".join(f"`{m}`" for _, m, _, _ in jobs) + ", mỗi model 16 mẫu/câu.")
+            "Chạy lần lượt " + ", ".join(f"`{m}`" for _, m, *_ in jobs) + ". Mỗi model: vòng 1 = 16 mẫu/câu với "
+            "schema đầy đủ (Vote@16 tái lập cột SC), vòng 2 = 8 mẫu với schema rút gọn theo SQL của 8 mẫu đầu. "
+            "Phương pháp mới = 8 mẫu đầu vòng 1 + 8 mẫu vòng 2 = 16 mẫu, bằng ngân sách SC của bài báo.")
     if slug == "1b":
         note += (" Bản SFT + RL của Llama (67.63) **chưa được tác giả công bố**, nên bỏ qua. Model gốc lấy từ "
                  "`unsloth/` (bản sao không cần xin quyền của `meta-llama/Llama-3.2-1B-Instruct`).")
     if slug == "0.6b":
         note += (" Qwen3-0.6B gốc mặc định *thinking*; với `max_new_tokens` 1024 như bài báo, một phần mẫu có thể "
                  "bị cắt trước khi ra SQL (đếm ở dòng `samples without SQL` của log).")
-    NOTEBOOKS[f"spider-dev_{size}-{base_name}_base-sft-rl"] = (
-        SPIDER, f"Spider dev · {base_name}: base / SFT / SFT + RL · 16 mẫu", note, jobs, hours)
+    NOTEBOOKS[f"spider-dev_{size}-{base_name}_base-sft-rl_2vong"] = (
+        SPIDER, f"Spider dev · {base_name}: base / SFT / SFT + RL · 16 mẫu + vòng 2", note, jobs, hours)
 
 
 def md(text):
@@ -108,7 +118,11 @@ src = [os.path.dirname(p) for p in glob.glob("/kaggle/input/**/adaptive-slm-sql/
        if os.path.isfile(os.path.join(os.path.dirname(p), DATASET))
        and os.path.isdir(os.path.join(os.path.dirname(p), "data", "external"))
        and not os.path.islink(os.path.join(os.path.dirname(p), "data", "external"))]
-assert src, f"Không thấy adaptive-slm-sql/{DATASET} trong /kaggle/input: Add Input dataset {KAGGLE_DATASET}"
+if not src:
+    found = sorted(glob.glob("/kaggle/input/**/adaptive-slm-sql/data/benchmarks/*.json", recursive=True))
+    raise SystemExit(f"Notebook {NOTEBOOK} cần {DATASET} (dataset {KAGGLE_DATASET}), nhưng /kaggle/input chỉ có:\\n  "
+                     + ("\\n  ".join(found) or "(không có adaptive-slm-sql nào)")
+                     + f"\\n→ Add Input dataset {KAGGLE_DATASET}, hoặc mở đúng notebook cho dataset đang có.")
 src = src[0]
 work = "/tmp/adaptive-slm-sql"  # ngoài /kaggle/working để Output chỉ có kết quả
 if not os.path.exists(work):
@@ -125,7 +139,7 @@ print("Số GPU:", GPUS)
 '''
 
 RUN = '''
-def run_job(run, model, pool, seed_offset):
+def run_job(run, model, pool, seed_offset, keep=None):
     output = f"/kaggle/working/results/{run}"
     os.makedirs(output, exist_ok=True)
     procs = []
@@ -139,6 +153,8 @@ def run_job(run, model, pool, seed_offset):
         cmd = [PY, "-u", "-m", "evaluation.vllm_collect", "--dataset", DATASET, "--output", out,
                "--pool", str(pool), "--chunk", "32", "--dtype", "half", "--seed-offset", str(seed_offset),
                "--shard", f"{shard}/{GPUS}", "--model", model]
+        if keep:
+            cmd += ["--keep-schema", keep]
         if LIMIT:
             cmd += ["--limit", str(LIMIT)]
         env = dict(os.environ, VLLM_USE_V1="0", CUDA_VISIBLE_DEVICES=str(shard))
@@ -162,10 +178,30 @@ def run_job(run, model, pool, seed_offset):
         print(f"{run} GPU {shard}: exit code", proc.returncode)
 
 
+def make_keep(run, samples):
+    """Schema for round 2: tables/columns used by the first `samples` executable SQL of round 1 (no gold)."""
+    rows = [line for path in sorted(glob.glob(f"/kaggle/working/results/{run}/shard*/pool.jsonl"))
+            for line in open(path, encoding="utf-8") if line.strip()]
+    pool = f"/tmp/{run}-round1.jsonl"
+    with open(pool, "w", encoding="utf-8") as handle:
+        handle.writelines(rows)
+    keep = f"/kaggle/working/results/{run}-prune{samples}/keep.json"
+    os.makedirs(os.path.dirname(keep), exist_ok=True)
+    r = subprocess.run([PY, "-m", "evaluation.schema_keep", pool, DATASET, "--samples", str(samples),
+                        "--output", keep], capture_output=True, text=True)
+    print(r.stdout, r.stderr[-3000:])
+    assert r.returncode == 0, "schema_keep lỗi"
+    return keep
+
+
 started = time.time()
-for job in JOBS:
-    print(f"=== {job[0]}: {job[1]}, {job[2]} mẫu/câu ===", flush=True)
-    run_job(*job)
+for run, model, pool, seed_offset, round2 in JOBS:
+    print(f"=== {run}: {model}, vòng 1, {pool} mẫu/câu, schema đầy đủ ===", flush=True)
+    run_job(run, model, pool, seed_offset)
+    if round2:
+        keep = make_keep(run, round2)
+        print(f"=== {run}-prune{round2}: vòng 2, {round2} mẫu/câu, schema rút gọn ===", flush=True)
+        run_job(f"{run}-prune{round2}", model, round2, ROUND2_SEED, keep)
     print(f"Đã chạy {(time.time() - started) / 3600:.1f} giờ", flush=True)
 '''
 
@@ -177,13 +213,14 @@ runs = " ".join(job[0] for job in JOBS)
 ZIP = '''
 os.chdir("/kaggle/working")
 with open("README.txt", "w", encoding="utf-8") as handle:
-    handle.write(f"Notebook: {NOTEBOOK}\\nDataset: {DATASET}\\nRuns: " + ", ".join(f"{r} = {m}" for r, m, _, _ in JOBS) + "\\n")
+    handle.write(f"Notebook: {NOTEBOOK}\\nDataset: {DATASET}\\nRuns: " + ", ".join(f"{r} (+ vòng 2 {r}-prune{k}) = {m}" for r, m, _, _, k in JOBS) + "\\n")
 import zipfile
 archive = f"/kaggle/working/{NOTEBOOK}.zip"
 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
     z.write("README.txt")
-    for run, *_ in JOBS:
-        for path in sorted(glob.glob(f"results/{run}/**/*", recursive=True)):
+    for run, *_, round2 in JOBS:
+        for path in sorted(glob.glob(f"results/{run}/**/*", recursive=True)
+                           + glob.glob(f"results/{run}-prune{round2}/**/*", recursive=True)):
             if os.path.isfile(path):
                 z.write(path)
 from IPython.display import FileLink
@@ -193,7 +230,7 @@ FileLink(os.path.basename(archive))
 
 
 def notebook(name, bench, title, note, jobs, hours):
-    jobs_src = "\n".join(f'    ("{r}", "{m}", {p}, {s}),' for r, m, p, s in jobs)
+    jobs_src = "\n".join(f'    ("{r}", "{m}", {p}, {s}, {k}),' for r, m, p, s, k in jobs)
     intro = f"""
 # {title}
 
@@ -219,7 +256,8 @@ def notebook(name, bench, title, note, jobs, hours):
 NOTEBOOK = "{name}"
 KAGGLE_DATASET = "{bench['kaggle']}"
 DATASET = "{bench['dataset']}"
-JOBS = [  # (thư mục kết quả results/<RUN>, model Hugging Face, số mẫu/câu, seed offset)
+ROUND2_SEED = {ROUND2_SEED}
+JOBS = [  # (results/<RUN>, model Hugging Face, số mẫu vòng 1, seed offset, số mẫu vòng 2 với schema rút gọn)
 {jobs_src}
 ]
 LIMIT = None  # 20 để chạy thử nhanh

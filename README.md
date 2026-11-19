@@ -228,7 +228,7 @@ python -m evaluation.selection_report results/selection-bird-dev200-adaptive
 
 Kết quả: mục 9, [So sánh với bài báo: BIRD dev, 1534 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-1534-câu) và [200 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-200-câu).
 
-**So sánh mọi model của bài báo (BIRD dev Bảng 2, Spider dev Bảng 3 cột SC):** notebook đặt tên theo tập và model trong [notebooks/paper/](notebooks/paper/), hướng dẫn chạy và lấy kết quả ở [docs/kaggle-so-sanh-bai-bao.md](docs/kaggle-so-sanh-bai-bao.md), bảng so sánh bằng `python -m evaluation.paper_compare --write-pool`.
+**So sánh mọi model của bài báo (BIRD dev Bảng 2, Spider dev Bảng 3 cột SC):** notebook đặt tên theo tập và model trong [notebooks/paper/](notebooks/paper/), hướng dẫn chạy và lấy kết quả ở [docs/kaggle-so-sanh-bai-bao.md](docs/kaggle-so-sanh-bai-bao.md), bảng so sánh (tái lập và phương pháp hai vòng + CAV-3) bằng `python -m evaluation.paper_compare --write-pool --method`.
 
 #### Sinh pool trên Kaggle bằng vLLM (đủ 16 mẫu, cả 1534 câu)
 
