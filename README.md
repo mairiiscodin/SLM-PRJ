@@ -228,6 +228,8 @@ python -m evaluation.selection_report results/selection-bird-dev200-adaptive
 
 Kết quả: mục 9, [So sánh với bài báo: BIRD dev, 1534 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-1534-câu) và [200 câu](#so-sánh-với-bài-báo-bird-dev-slm-sql-15b-200-câu).
 
+**So sánh mọi model của bài báo (BIRD dev Bảng 2, Spider dev Bảng 3 cột SC):** notebook đặt tên theo tập và model trong [notebooks/paper/](notebooks/paper/), hướng dẫn chạy và lấy kết quả ở [docs/kaggle-so-sanh-bai-bao.md](docs/kaggle-so-sanh-bai-bao.md), bảng so sánh bằng `python -m evaluation.paper_compare --write-pool`.
+
 #### Sinh pool trên Kaggle bằng vLLM (đủ 16 mẫu, cả 1534 câu)
 
 GPU 4 GB cần khoảng 4–17 phút/câu với 16 mẫu. Trên Kaggle (T4 16 GB, miễn phí khoảng 30 giờ GPU/tuần), `evaluation/vllm_collect.py` sinh pool bằng vLLM như code của SLM-SQL/CSC-SQL: cùng prompt, sampling, trích SQL, kiểm tra, thực thi và nhãn gold như `run_sweep collect --prompt paper --skip-greedy`, ghi `pool.jsonl` cùng định dạng, đường dẫn DB tương đối với thư mục project.
