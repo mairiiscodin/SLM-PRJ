@@ -34,7 +34,7 @@ NOTEBOOKS = {
     "bird-dev_SLM-SQL-0.6B_64mau_2vong": (
         BIRD, "BIRD dev · SLM-SQL-0.6B (Qwen3-0.6B, SFT + RL) · 64 mẫu + vòng 2",
         "Bài báo Bảng 2: **59.52** (64 mẫu + CSC). " + BIRD_ROUND1,
-        [("bird-dev-0.6b-rl", "cycloneboy/SLM-SQL-0.6B", 64, 0, 32)], "7–10 giờ"),
+        [("bird-dev-0.6b-rl", "cycloneboy/SLM-SQL-0.6B", 64, 0, 32)], "15–17 giờ, 2 version (vòng 1 đo thật: ~11 giờ)"),
     "bird-dev_SLM-SQL-Base-1B_64mau_2vong": (
         BIRD, "BIRD dev · SLM-SQL-Base-1B (Llama-3.2-1B, SFT) · 64 mẫu + vòng 2",
         "Bài báo Bảng 2: **54.78** (SLM-SQL-1B, SFT + RL, 64 mẫu + CSC). Tác giả **chưa công bố** bản SFT + RL "
@@ -173,9 +173,18 @@ def run_job(run, model, pool, seed_offset, keep=None):
             seen[shard] = len(lines)
         if not running:
             break
+        if time.time() - START > STOP_AFTER_HOURS * 3600:
+            # Stop before Kaggle's 12-hour kill so the zip cell still runs; every finished chunk is already on disk.
+            print(f"Đã quá {STOP_AFTER_HOURS} giờ: dừng sinh mẫu, chạy tiếp ở version sau.", flush=True)
+            for _, _, proc in procs:
+                proc.terminate()
+            for _, _, proc in procs:
+                proc.wait()
+            return False
         time.sleep(60)
     for shard, _, proc in procs:
         print(f"{run} GPU {shard}: exit code", proc.returncode)
+    return all(proc.returncode == 0 for _, _, proc in procs)
 
 
 def make_keep(run, samples):
@@ -194,15 +203,18 @@ def make_keep(run, samples):
     return keep
 
 
-started = time.time()
 for run, model, pool, seed_offset, round2 in JOBS:
     print(f"=== {run}: {model}, vòng 1, {pool} mẫu/câu, schema đầy đủ ===", flush=True)
-    run_job(run, model, pool, seed_offset)
-    if round2:
+    done = run_job(run, model, pool, seed_offset)
+    # Round 2's schema needs every question of round 1: never start it from a partial round 1.
+    if done and round2:
         keep = make_keep(run, round2)
         print(f"=== {run}-prune{round2}: vòng 2, {round2} mẫu/câu, schema rút gọn ===", flush=True)
-        run_job(f"{run}-prune{round2}", model, round2, ROUND2_SEED, keep)
-    print(f"Đã chạy {(time.time() - started) / 3600:.1f} giờ", flush=True)
+        done = run_job(f"{run}-prune{round2}", model, round2, ROUND2_SEED, keep)
+    print(f"Đã chạy {(time.time() - START) / 3600:.1f} giờ", flush=True)
+    if not done:
+        print("CHƯA XONG: tải zip hoặc Add Input output của version này rồi Save & Run All lại để chạy tiếp.")
+        break
 '''
 
 CHECK = '''
@@ -253,6 +265,7 @@ def notebook(name, bench, title, note, jobs, hours):
 **Chạy tiếp khi hết 12 giờ:** *Add Input* → *Notebooks* → chọn chính notebook này (output version trước), rồi *Save & Run All* lại. Cell sinh mẫu tự chép `pool.jsonl` cũ và chỉ sinh các câu còn thiếu.
 """
     config = f'''
+import time
 NOTEBOOK = "{name}"
 KAGGLE_DATASET = "{bench['kaggle']}"
 DATASET = "{bench['dataset']}"
@@ -261,6 +274,8 @@ JOBS = [  # (results/<RUN>, model Hugging Face, số mẫu vòng 1, seed offset,
 {jobs_src}
 ]
 LIMIT = None  # 20 để chạy thử nhanh
+STOP_AFTER_HOURS = 11.3  # Kaggle dừng phiên ở 12 giờ; dừng sớm để kịp nén kết quả
+START = time.time()
 '''
     cells = [
         md(intro),

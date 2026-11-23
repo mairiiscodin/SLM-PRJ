@@ -21,7 +21,7 @@ Các notebook nằm trong [notebooks/paper/](../notebooks/paper/), sinh bằng `
 | Notebook | Kaggle dataset | Model chạy | Thư mục kết quả (vòng 1, vòng 2) | Bài báo | Thời gian (T4 x2) |
 |---|---|---|---|---|---|
 | `bird-dev_SLM-SQL-0.5B_64mau_2vong` | `slmsql-bird-dev` | `cycloneboy/SLM-SQL-0.5B` | `bird-dev-0.5b-rl`, `…-prune32` | 56.87 | vòng 1 **đã xong**, vòng 2: 2–3 giờ |
-| `bird-dev_SLM-SQL-0.6B_64mau_2vong` | `slmsql-bird-dev` | `cycloneboy/SLM-SQL-0.6B` | `bird-dev-0.6b-rl`, `…-prune32` | 59.52 | 7–10 giờ |
+| `bird-dev_SLM-SQL-0.6B_64mau_2vong` | `slmsql-bird-dev` | `cycloneboy/SLM-SQL-0.6B` | `bird-dev-0.6b-rl`, `…-prune32` | 59.52 | 15–17 giờ, 2 version (vòng 1 đo thật ~11 giờ: Qwen3 sinh dài) |
 | `bird-dev_SLM-SQL-Base-1B_64mau_2vong` | `slmsql-bird-dev` | `cycloneboy/SLM-SQL-Base-1B` (SFT) | `bird-dev-1b-sft`, `…-prune32` | 54.78 (SFT + RL) | 7–10 giờ |
 | `bird-dev_SLM-SQL-1.3B_64mau_2vong` | `slmsql-bird-dev` | `cycloneboy/SLM-SQL-1.3B` | `bird-dev-1.3b-rl`, `…-prune32` | 62.19 | 24–36 giờ (3 version) |
 | (đã có) | | `cycloneboy/SLM-SQL-1.5B` | `bird-dev-vllm-64`, `bird-dev-prune32` | 67.08 | |
