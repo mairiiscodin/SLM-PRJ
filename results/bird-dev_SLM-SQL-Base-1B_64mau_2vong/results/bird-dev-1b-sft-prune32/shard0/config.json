@@ -1,0 +1,88 @@
+{
+  "model": {
+    "backend": "huggingface",
+    "model_id": "cycloneboy/SLM-SQL-1.5B",
+    "device": "auto",
+    "dtype": "auto",
+    "quantization": "none",
+    "local_files_only": true
+  },
+  "seed": 42,
+  "generation": {
+    "temperature": 0.8,
+    "top_p": 1.0,
+    "max_new_tokens": 1024,
+    "batch_size": 4,
+    "max_input_tokens": 7000,
+    "top_k": 0,
+    "repetition_penalty": 1.0,
+    "system_prompt": "You are a helpful AI Assistant that provides well-reasoned and detailed responses. You first think about the reasoning process as an internal monologue and then provide the user with the answer. Respond in the following format: <think>\n...\n</think>\n<answer>\n...\n</answer>"
+  },
+  "sampling": {
+    "mode": "greedy",
+    "fixed_k": 8,
+    "rounds": [
+      4,
+      4,
+      8,
+      16
+    ],
+    "min_valid_candidates": 4,
+    "confidence_threshold": 0.75,
+    "margin_threshold": 0.25,
+    "max_candidates": 32,
+    "time_budget_seconds": 900
+  },
+  "validation": {
+    "schema": true,
+    "schema_selection": false
+  },
+  "execution": {
+    "timeout_seconds": 30,
+    "max_steps": 1000000000000,
+    "max_rows": 50000,
+    "max_result_rows": 50000,
+    "max_result_bytes": 8388608
+  },
+  "correction": {
+    "enabled": false,
+    "per_candidate": 1,
+    "total_budget": 4
+  },
+  "ranking": {
+    "vote": 0.5,
+    "schema": 0.2,
+    "execution": 0.2,
+    "generation": 0.1,
+    "warning_penalty": 0.01
+  },
+  "schema": {
+    "sample_rows": 2,
+    "max_tables": 100,
+    "max_columns": 300
+  },
+  "upload": {
+    "max_mb": 20
+  },
+  "logging_level": "INFO",
+  "sweep": {
+    "dataset": "data/benchmarks/bird_dev.json",
+    "output": "/kaggle/working/results/bird-dev-1b-sft-prune32/shard0",
+    "config": "None",
+    "model": "cycloneboy/SLM-SQL-Base-1B",
+    "pool": "32",
+    "limit": "None",
+    "chunk": "32",
+    "dtype": "half",
+    "max_model_len": "8192",
+    "gpu_memory": "0.9",
+    "tensor_parallel": "1",
+    "seed_offset": "300000",
+    "shard": "0/2",
+    "temperature": "None",
+    "keep_schema": "/kaggle/working/results/bird-dev-1b-sft-prune32/keep.json",
+    "kv_budget": "0.9",
+    "retrieval": "paper"
+  },
+  "backend": "vllm"
+}

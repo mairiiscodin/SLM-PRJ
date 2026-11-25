@@ -1,0 +1,53 @@
+INFO 11-19 15:43:41 [__init__.py:239] Automatically detected platform cuda.
+0 done, 767 to sample
+WARNING 11-19 15:43:44 [config.py:2972] Casting torch.bfloat16 to torch.float16.
+INFO 11-19 15:43:53 [config.py:717] This model supports multiple tasks: {'score', 'reward', 'embed', 'classify', 'generate'}. Defaulting to 'generate'.
+INFO 11-19 15:43:53 [llm_engine.py:240] Initializing a V0 LLM engine (v0.8.5.post1) with config: model='cycloneboy/SLM-SQL-0.5B', speculative_config=None, tokenizer='cycloneboy/SLM-SQL-0.5B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.float16, max_seq_len=8192, download_dir=None, load_format=LoadFormat.AUTO, tensor_parallel_size=1, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=False, kv_cache_dtype=auto,  device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar', reasoning_backend=None), observability_config=ObservabilityConfig(show_hidden_metrics=False, otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=42, served_model_name=cycloneboy/SLM-SQL-0.5B, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=True, chunked_prefill_enabled=False, use_async_output_proc=True, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":[],"compile_sizes":[],"cudagraph_capture_sizes":[256,248,240,232,224,216,208,200,192,184,176,168,160,152,144,136,128,120,112,104,96,88,80,72,64,56,48,40,32,24,16,8,4,2,1],"max_capture_size":256}, use_cached_outputs=False, 
+INFO 11-19 15:43:57 [cuda.py:240] Cannot use FlashAttention-2 backend for Volta and Turing GPUs.
+INFO 11-19 15:43:57 [cuda.py:289] Using XFormers backend.
+INFO 11-19 15:43:59 [parallel_state.py:1004] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, TP rank 0
+INFO 11-19 15:43:59 [model_runner.py:1108] Starting to load model cycloneboy/SLM-SQL-0.5B...
+INFO 11-19 15:43:59 [weight_utils.py:265] Using model weights format ['*.safetensors']
+INFO 11-19 15:44:03 [weight_utils.py:281] Time spent downloading weights for cycloneboy/SLM-SQL-0.5B: 4.402040 seconds
+INFO 11-19 15:44:03 [weight_utils.py:315] No model.safetensors.index.json found in remote.
+Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:01<00:00,  1.06s/it]
+Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:01<00:00,  1.06s/it]
+
+INFO 11-19 15:44:05 [loader.py:458] Loading weights took 1.06 seconds
+INFO 11-19 15:44:05 [model_runner.py:1140] Model loading took 0.9277 GiB and 5.741717 seconds
+INFO 11-19 15:44:06 [worker.py:287] Memory profiling takes 1.02 seconds
+INFO 11-19 15:44:06 [worker.py:287] the current vLLM instance can use total_gpu_memory (14.56GiB) x gpu_memory_utilization (0.90) = 13.11GiB
+INFO 11-19 15:44:06 [worker.py:287] model weights take 0.93GiB; non_torch_memory takes 0.05GiB; PyTorch activation peak memory takes 1.40GiB; the rest of the memory reserved for KV Cache is 10.73GiB.
+INFO 11-19 15:44:06 [executor_base.py:112] # cuda blocks: 58612, # CPU blocks: 21845
+INFO 11-19 15:44:06 [executor_base.py:117] Maximum concurrency for 8192 tokens per request: 114.48x
+INFO 11-19 15:44:11 [model_runner.py:1450] Capturing cudagraphs for decoding. This may lead to unexpected consequences if the model is not static. To run the model in eager mode, set 'enforce_eager=True' or use '--enforce-eager' in the CLI. If out-of-memory error occurs during cudagraph capture, consider decreasing `gpu_memory_utilization` or switching to eager mode. You can also reduce the `max_num_seqs` as needed to decrease memory usage.
+Capturing CUDA graph shapes:   0%|          | 0/35 [00:00<?, ?it/s]Capturing CUDA graph shapes:   3%|▎         | 1/35 [00:00<00:22,  1.54it/s]Capturing CUDA graph shapes:   6%|▌         | 2/35 [00:01<00:20,  1.60it/s]Capturing CUDA graph shapes:   9%|▊         | 3/35 [00:01<00:19,  1.67it/s]Capturing CUDA graph shapes:  11%|█▏        | 4/35 [00:02<00:17,  1.75it/s]Capturing CUDA graph shapes:  14%|█▍        | 5/35 [00:02<00:16,  1.78it/s]Capturing CUDA graph shapes:  17%|█▋        | 6/35 [00:03<00:16,  1.81it/s]Capturing CUDA graph shapes:  20%|██        | 7/35 [00:03<00:15,  1.81it/s]Capturing CUDA graph shapes:  23%|██▎       | 8/35 [00:04<00:15,  1.78it/s]Capturing CUDA graph shapes:  26%|██▌       | 9/35 [00:05<00:14,  1.81it/s]Capturing CUDA graph shapes:  29%|██▊       | 10/35 [00:05<00:13,  1.80it/s]Capturing CUDA graph shapes:  31%|███▏      | 11/35 [00:06<00:13,  1.81it/s]Capturing CUDA graph shapes:  34%|███▍      | 12/35 [00:06<00:12,  1.82it/s]Capturing CUDA graph shapes:  37%|███▋      | 13/35 [00:07<00:11,  1.88it/s]Capturing CUDA graph shapes:  40%|████      | 14/35 [00:07<00:10,  1.93it/s]Capturing CUDA graph shapes:  43%|████▎     | 15/35 [00:08<00:10,  1.97it/s]Capturing CUDA graph shapes:  46%|████▌     | 16/35 [00:08<00:09,  1.99it/s]Capturing CUDA graph shapes:  49%|████▊     | 17/35 [00:09<00:09,  1.98it/s]Capturing CUDA graph shapes:  51%|█████▏    | 18/35 [00:09<00:08,  1.91it/s]Capturing CUDA graph shapes:  54%|█████▍    | 19/35 [00:10<00:08,  1.96it/s]Capturing CUDA graph shapes:  57%|█████▋    | 20/35 [00:10<00:07,  2.01it/s]Capturing CUDA graph shapes:  60%|██████    | 21/35 [00:11<00:06,  2.04it/s]Capturing CUDA graph shapes:  63%|██████▎   | 22/35 [00:11<00:06,  2.07it/s]Capturing CUDA graph shapes:  66%|██████▌   | 23/35 [00:12<00:05,  2.09it/s]Capturing CUDA graph shapes:  69%|██████▊   | 24/35 [00:12<00:05,  2.11it/s]Capturing CUDA graph shapes:  71%|███████▏  | 25/35 [00:13<00:04,  2.13it/s]Capturing CUDA graph shapes:  74%|███████▍  | 26/35 [00:13<00:04,  2.14it/s]Capturing CUDA graph shapes:  77%|███████▋  | 27/35 [00:13<00:03,  2.13it/s]Capturing CUDA graph shapes:  80%|████████  | 28/35 [00:14<00:03,  2.08it/s]Capturing CUDA graph shapes:  83%|████████▎ | 29/35 [00:15<00:03,  1.79it/s]Capturing CUDA graph shapes:  86%|████████▌ | 30/35 [00:15<00:02,  1.85it/s]Capturing CUDA graph shapes:  89%|████████▊ | 31/35 [00:16<00:02,  1.42it/s]Capturing CUDA graph shapes:  91%|█████████▏| 32/35 [00:17<00:01,  1.57it/s]Capturing CUDA graph shapes:  94%|█████████▍| 33/35 [00:17<00:01,  1.70it/s]Capturing CUDA graph shapes:  97%|█████████▋| 34/35 [00:18<00:00,  1.76it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:18<00:00,  1.77it/s]Capturing CUDA graph shapes: 100%|██████████| 35/35 [00:18<00:00,  1.86it/s]
+INFO 11-19 15:44:30 [model_runner.py:1592] Graph capturing finished in 19 secs, took 0.13 GiB
+INFO 11-19 15:44:30 [llm_engine.py:437] init engine (profile, create kv cache, warmup model) took 24.88 seconds
+KV cache: 937792 tokens, budget per vLLM call: 844012
+[32/767] chunk of 32 in 894s (27.9s/question), 1/2048 samples without SQL
+[64/767] chunk of 32 in 765s (23.9s/question), 1/2048 samples without SQL
+[96/767] chunk of 32 in 632s (19.7s/question), 0/2048 samples without SQL
+[128/767] chunk of 32 in 432s (13.5s/question), 0/2048 samples without SQL
+[160/767] chunk of 32 in 416s (13.0s/question), 5/2048 samples without SQL
+[192/767] chunk of 32 in 700s (21.9s/question), 1/2048 samples without SQL
+[224/767] chunk of 32 in 867s (27.1s/question), 2/2048 samples without SQL
+[256/767] chunk of 32 in 875s (27.3s/question), 1/2048 samples without SQL
+[288/767] chunk of 32 in 742s (23.2s/question), 0/2048 samples without SQL
+[320/767] chunk of 32 in 719s (22.5s/question), 1/2048 samples without SQL
+[352/767] chunk of 32 in 698s (21.8s/question), 1/2048 samples without SQL
+[384/767] chunk of 32 in 529s (16.5s/question), 0/2048 samples without SQL
+[416/767] chunk of 32 in 474s (14.8s/question), 0/2048 samples without SQL
+[448/767] chunk of 32 in 739s (23.1s/question), 0/2048 samples without SQL
+[480/767] chunk of 32 in 820s (25.6s/question), 1/2048 samples without SQL
+[512/767] chunk of 32 in 854s (26.7s/question), 0/2048 samples without SQL
+[544/767] chunk of 32 in 1347s (42.1s/question), 2/2048 samples without SQL
+[576/767] chunk of 32 in 1314s (41.1s/question), 1/2048 samples without SQL
+[608/767] chunk of 32 in 675s (21.1s/question), 0/2048 samples without SQL
+[640/767] chunk of 32 in 645s (20.1s/question), 2/2048 samples without SQL
+[672/767] chunk of 32 in 643s (20.1s/question), 1/2048 samples without SQL
+[704/767] chunk of 32 in 607s (19.0s/question), 0/2048 samples without SQL
+[736/767] chunk of 32 in 600s (18.7s/question), 2/2048 samples without SQL
+[767/767] chunk of 31 in 471s (15.2s/question), 0/1984 samples without SQL
+[rank0]:[W1119 22:13:11.632878764 ProcessGroupNCCL.cpp:1496] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

@@ -13,6 +13,11 @@ results/*
 !results/*/
 results/*/*
 !results/*/tables.md
+# Share the complete 64-sample Bird runs for these two models.
+!results/bird-dev_SLM-SQL-0.5B_64mau_2vong/
+!results/bird-dev_SLM-SQL-0.5B_64mau_2vong/**
+!results/bird-dev_SLM-SQL-Base-1B_64mau_2vong/
+!results/bird-dev_SLM-SQL-Base-1B_64mau_2vong/**
 data/benchmarks/
 # Spider (CC BY-SA 4.0) and ViText2SQL (no redistribution): download locally, never commit.
 data/external/
